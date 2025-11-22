@@ -1,0 +1,27 @@
+export interface User {
+  id: string;
+  name: string;
+  role: 'husband' | 'wife' | 'partner';
+  avatarColor: string;
+}
+
+export interface TodoItem {
+  id: string;
+  dateStr: string; // YYYY-MM-DD
+  text: string;
+  completed: boolean;
+  createdBy: string; // User ID
+}
+
+export interface DayData {
+  date: Date;
+  isCurrentMonth: boolean;
+  isToday: boolean;
+  dateStr: string;
+  todos: TodoItem[];
+}
+
+export enum GeminiAction {
+  SUGGEST_TASKS = 'SUGGEST_TASKS',
+  ENCOURAGE = 'ENCOURAGE'
+}

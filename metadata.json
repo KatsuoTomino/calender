@@ -1,0 +1,5 @@
+{
+  "name": "Kizuna Calendar",
+  "description": "A shared family calendar application for couples. Features Google Calendar-style navigation, daily To-Do lists, and AI-powered task suggestions to manage household chores and schedules efficiently.",
+  "requestFramePermissions": []
+}

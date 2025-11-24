@@ -1,36 +1,40 @@
 <!DOCTYPE html>
 <html lang="ja">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=0" />
-    <title>Kizuna Calendar</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-      tailwind.config = {
-        theme: {
-          extend: {
-            colors: {
-              primary: '#ec4899', // Pink-500
-              primaryLight: '#fbcfe8', // Pink-200
-              secondary: '#14b8a6', // Teal-500
-              secondaryLight: '#ccfbf1', // Teal-100
-              dark: '#1e293b', // Slate-800
-            }
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=0" />
+  <title>Kizuna Calendar</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            primary: '#ec4899', // Pink-500
+            primaryLight: '#fbcfe8', // Pink-200
+            secondary: '#14b8a6', // Teal-500
+            secondaryLight: '#ccfbf1', // Teal-100
+            dark: '#1e293b', // Slate-800
           }
         }
       }
-    </script>
-    <style>
-      /* Hide scrollbar for Chrome, Safari and Opera */
-      .no-scrollbar::-webkit-scrollbar {
-          display: none;
-      }
-      /* Hide scrollbar for IE, Edge and Firefox */
-      .no-scrollbar {
-          -ms-overflow-style: none;  /* IE and Edge */
-          scrollbar-width: none;  /* Firefox */
-      }
-    </style>
+    }
+  </script>
+  <style>
+    /* Hide scrollbar for Chrome, Safari and Opera */
+    .no-scrollbar::-webkit-scrollbar {
+      display: none;
+    }
+
+    /* Hide scrollbar for IE, Edge and Firefox */
+    .no-scrollbar {
+      -ms-overflow-style: none;
+      /* IE and Edge */
+      scrollbar-width: none;
+      /* Firefox */
+    }
+  </style>
   <script type="importmap">
 {
   "imports": {
@@ -42,8 +46,10 @@
 }
 </script>
 </head>
-  <body class="bg-slate-50 text-slate-800 antialiased h-screen overflow-hidden">
-    <div id="root" class="h-full w-full"></div>
-    <script type="module" src="/index.tsx"></script>
-  </body>
+
+<body class="bg-slate-50 text-slate-800 antialiased h-screen overflow-hidden">
+  <div id="root" class="h-full w-full"></div>
+  <script type="module" src="/index.tsx"></script>
+</body>
+
 </html>

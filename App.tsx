@@ -227,7 +227,7 @@ const App: React.FC = () => {
           </div>
           <div>
             <h1 className="font-bold text-slate-700 text-sm sm:text-base">
-              Kizuna Calendar
+              Tomy's Calendar
             </h1>
             <p className="text-[10px] text-slate-500">
               Welcome back, {user.name}

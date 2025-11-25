@@ -47,10 +47,14 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
     <div className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-br from-pink-50 to-teal-50 p-4">
       <div className="w-full max-w-md bg-white rounded-2xl shadow-xl p-8">
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-pink-100 text-primary text-3xl mb-4">
-            🗓️
+          <div className="inline-flex items-center justify-center mb-4">
+            <img
+              src="/image/family.png"
+              alt="Family"
+              className="w-32 h-32 object-contain"
+            />
           </div>
-          <h1 className="text-2xl font-bold text-slate-800">Kizuna Calendar</h1>
+          <h1 className="text-2xl font-bold text-slate-800">Tomy's Calendar</h1>
           <p className="text-slate-500 mt-2 text-sm">
             認証済みユーザー専用ログイン
           </p>

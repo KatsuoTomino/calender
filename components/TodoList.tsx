@@ -1,10 +1,7 @@
 import React, { useState, useRef, useEffect } from "react";
 import { TodoItem, User } from "../types";
 import { generateId } from "../services/storageService";
-import {
-  generateSubtasks,
-  generateEncouragement,
-} from "../services/geminiService";
+import { generateEncouragement } from "../services/geminiService";
 import Button from "./Button";
 
 interface TodoListProps {
@@ -27,7 +24,6 @@ const TodoList: React.FC<TodoListProps> = ({
   onClose,
 }) => {
   const [newTodoText, setNewTodoText] = useState("");
-  const [isThinking, setIsThinking] = useState(false);
   const [encouragement, setEncouragement] = useState<string | null>(null);
 
   const inputRef = useRef<HTMLInputElement>(null);
@@ -59,37 +55,6 @@ const TodoList: React.FC<TodoListProps> = ({
 
     onAddTodo(newItem);
     setNewTodoText("");
-  };
-
-  const handleGeminiSuggest = async () => {
-    if (!newTodoText.trim()) return;
-    setIsThinking(true);
-
-    // First add the main task
-    const mainTask: TodoItem = {
-      id: generateId(),
-      dateStr: formatLocalDate(date),
-      text: newTodoText,
-      completed: false,
-      createdBy: currentUser.id,
-    };
-    onAddTodo(mainTask);
-
-    // Then get suggestions
-    const suggestions = await generateSubtasks(newTodoText);
-
-    suggestions.forEach((text) => {
-      onAddTodo({
-        id: generateId(),
-        dateStr: formatLocalDate(date),
-        text: `  ↳ ${text}`, // Indent visually
-        completed: false,
-        createdBy: currentUser.id,
-      });
-    });
-
-    setNewTodoText("");
-    setIsThinking(false);
   };
 
   const handleCheck = async (id: string) => {
@@ -238,68 +203,19 @@ const TodoList: React.FC<TodoListProps> = ({
           <input
             ref={inputRef}
             type="text"
-            className="w-full pl-4 pr-24 py-3 rounded-xl bg-slate-50 border-none focus:ring-2 focus:ring-pink-100 text-sm"
+            className="w-full pl-4 pr-14 py-3 rounded-xl bg-slate-50 border-none focus:ring-2 focus:ring-pink-100 text-sm"
             placeholder="新しいタスク..."
             value={newTodoText}
             onChange={(e) => setNewTodoText(e.target.value)}
           />
-          <div className="absolute right-1 top-1 bottom-1 flex gap-1">
-            {newTodoText && (
-              <button
-                type="button"
-                onClick={handleGeminiSuggest}
-                disabled={isThinking}
-                className="bg-purple-100 text-purple-600 hover:bg-purple-200 px-3 rounded-lg text-xs font-bold transition-colors flex items-center gap-1"
-                title="AI Suggest Subtasks"
-              >
-                {isThinking ? (
-                  <svg className="animate-spin h-3 w-3" viewBox="0 0 24 24">
-                    <circle
-                      className="opacity-25"
-                      cx="12"
-                      cy="12"
-                      r="10"
-                      stroke="currentColor"
-                      strokeWidth="4"
-                    ></circle>
-                    <path
-                      className="opacity-75"
-                      fill="currentColor"
-                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                    ></path>
-                  </svg>
-                ) : (
-                  <>
-                    <span>AI</span>
-                    <svg
-                      className="w-3 h-3"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M13 10V3L4 14h7v7l9-11h-7z"
-                      />
-                    </svg>
-                  </>
-                )}
-              </button>
-            )}
-            <button
-              type="submit"
-              disabled={!newTodoText.trim()}
-              className="bg-primary text-white px-4 rounded-lg font-bold text-lg hover:bg-pink-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              +
-            </button>
-          </div>
+          <button
+            type="submit"
+            disabled={!newTodoText.trim()}
+            className="absolute right-1 top-1 bottom-1 bg-primary text-white px-4 rounded-lg font-bold text-lg hover:bg-pink-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            +
+          </button>
         </form>
-        <p className="text-[10px] text-slate-400 mt-2 text-center">
-          AIボタンを押すと、タスクを細分化して提案します
-        </p>
       </div>
     </div>
   );

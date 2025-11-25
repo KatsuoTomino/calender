@@ -105,6 +105,27 @@ const TodoList: React.FC<TodoListProps> = ({
         </button>
       </div>
 
+      {/* Input Area */}
+      <div className="p-4 bg-white border-b border-slate-100 shrink-0">
+        <form onSubmit={handleAdd} className="relative">
+          <input
+            ref={inputRef}
+            type="text"
+            className="w-full pl-4 pr-14 py-3 rounded-xl bg-slate-50 border-none focus:ring-2 focus:ring-pink-100 text-sm"
+            placeholder="新しいタスク..."
+            value={newTodoText}
+            onChange={(e) => setNewTodoText(e.target.value)}
+          />
+          <button
+            type="submit"
+            disabled={!newTodoText.trim()}
+            className="absolute right-1 top-1 bottom-1 bg-primary text-white px-4 rounded-lg font-bold text-lg hover:bg-pink-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            +
+          </button>
+        </form>
+      </div>
+
       {/* List */}
       <div className="flex-1 overflow-y-auto p-4 space-y-3 no-scrollbar">
         {sortedTodos.length === 0 ? (
@@ -192,31 +213,10 @@ const TodoList: React.FC<TodoListProps> = ({
 
       {/* Encouragement Toast */}
       {encouragement && (
-        <div className="absolute top-20 right-4 left-4 md:left-auto md:w-72 bg-secondary text-white p-3 rounded-xl shadow-xl animate-bounce text-center text-sm z-50">
+        <div className="absolute top-32 right-4 left-4 md:left-auto md:w-72 bg-secondary text-white p-3 rounded-xl shadow-xl animate-bounce text-center text-sm z-50">
           ✨ {encouragement}
         </div>
       )}
-
-      {/* Input Area */}
-      <div className="p-4 bg-white border-t border-slate-100">
-        <form onSubmit={handleAdd} className="relative">
-          <input
-            ref={inputRef}
-            type="text"
-            className="w-full pl-4 pr-14 py-3 rounded-xl bg-slate-50 border-none focus:ring-2 focus:ring-pink-100 text-sm"
-            placeholder="新しいタスク..."
-            value={newTodoText}
-            onChange={(e) => setNewTodoText(e.target.value)}
-          />
-          <button
-            type="submit"
-            disabled={!newTodoText.trim()}
-            className="absolute right-1 top-1 bottom-1 bg-primary text-white px-4 rounded-lg font-bold text-lg hover:bg-pink-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            +
-          </button>
-        </form>
-      </div>
     </div>
   );
 };

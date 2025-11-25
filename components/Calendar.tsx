@@ -101,19 +101,19 @@ const Calendar: React.FC<CalendarProps> = ({
     d.getFullYear() === selectedDate.getFullYear();
 
   return (
-    <div className="bg-white rounded-3xl shadow-sm p-4 h-full flex flex-col">
+    <div className="bg-white rounded-2xl md:rounded-3xl shadow-sm p-2 sm:p-4 h-full flex flex-col">
       {/* Header */}
-      <div className="flex items-center justify-between mb-4 px-2 shrink-0">
-        <h2 className="text-2xl font-bold text-slate-800 flex items-baseline gap-2">
+      <div className="flex items-center justify-between mb-2 sm:mb-4 px-1 sm:px-2 shrink-0">
+        <h2 className="text-xl sm:text-2xl font-bold text-slate-800 flex items-baseline gap-1 sm:gap-2">
           {currentDate.getFullYear()}年
-          <span className="text-primary text-3xl">
+          <span className="text-primary text-2xl sm:text-3xl">
             {currentDate.getMonth() + 1}月
           </span>
         </h2>
-        <div className="flex gap-2 items-center">
+        <div className="flex gap-1 sm:gap-2 items-center">
           <button
             onClick={onDeleteMonthTodos}
-            className="px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 rounded-lg transition-colors flex items-center gap-1"
+            className="px-2 sm:px-3 py-1 sm:py-1.5 text-[10px] sm:text-xs font-medium text-red-600 hover:bg-red-50 rounded-lg transition-colors flex items-center gap-0.5 sm:gap-1"
             title="この月のTodoを全て削除"
           >
             <svg
@@ -175,11 +175,11 @@ const Calendar: React.FC<CalendarProps> = ({
       </div>
 
       {/* Weekday Headers */}
-      <div className="grid grid-cols-7 mb-2 shrink-0">
+      <div className="grid grid-cols-7 mb-1 sm:mb-2 shrink-0">
         {WEEKDAYS.map((day, idx) => (
           <div
             key={day}
-            className={`text-center text-xs font-bold ${
+            className={`text-center text-[10px] sm:text-xs font-bold ${
               idx === 0
                 ? "text-red-400"
                 : idx === 6
@@ -214,10 +214,10 @@ const Calendar: React.FC<CalendarProps> = ({
               {/* Date Number */}
               <span
                 className={`
-                  text-xs font-medium w-6 h-6 flex items-center justify-center rounded-full mb-1
+                  text-[10px] sm:text-xs font-medium w-5 h-5 sm:w-6 sm:h-6 flex items-center justify-center rounded-full mb-0.5 sm:mb-1
                   ${
                     day.isToday
-                      ? "bg-primary text-white"
+                      ? "bg-primary text-white shadow-md"
                       : isDaySelected
                       ? "text-primary font-bold"
                       : ""
@@ -229,11 +229,11 @@ const Calendar: React.FC<CalendarProps> = ({
 
               {/* Todo Bars */}
               <div className="w-full flex flex-col gap-0.5 overflow-hidden">
-                {day.todos.slice(0, 3).map((todo) => (
+                {day.todos.slice(0, 2).map((todo) => (
                   <div
                     key={todo.id}
                     className={`
-                      w-full px-1.5 py-0.5 rounded text-[10px] truncate font-medium leading-tight
+                      hidden sm:block w-full px-1.5 py-0.5 rounded text-[10px] truncate font-medium leading-tight
                       ${
                         todo.completed
                           ? "bg-slate-100 text-slate-400 line-through decoration-slate-400"
@@ -246,10 +246,19 @@ const Calendar: React.FC<CalendarProps> = ({
                   </div>
                 ))}
 
+                {/* Todo Count Badge for Mobile */}
+                {day.todos.length > 0 && (
+                  <div className="sm:hidden absolute top-0.5 right-0.5">
+                    <div className="w-4 h-4 rounded-full bg-primary text-white text-[8px] flex items-center justify-center font-bold">
+                      {day.todos.length}
+                    </div>
+                  </div>
+                )}
+
                 {/* Overflow Indicator */}
-                {day.todos.length > 3 && (
-                  <div className="text-[10px] text-slate-400 px-1 font-medium">
-                    +{day.todos.length - 3} more
+                {day.todos.length > 2 && (
+                  <div className="hidden sm:block text-[10px] text-slate-400 px-1 font-medium">
+                    +{day.todos.length - 2} more
                   </div>
                 )}
               </div>

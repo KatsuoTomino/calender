@@ -109,18 +109,21 @@ const TodoList: React.FC<TodoListProps> = ({
   });
 
   return (
-    <div className="h-full flex flex-col bg-white md:rounded-3xl md:shadow-sm overflow-hidden border-l md:border-none border-slate-100">
+    <div className="h-full flex flex-col bg-white md:rounded-3xl shadow-sm overflow-hidden">
       {/* Header */}
-      <div className="p-6 border-b border-slate-50 flex justify-between items-center bg-gradient-to-r from-white to-pink-50/30">
+      <div className="p-4 sm:p-6 border-b border-slate-50 flex justify-between items-center bg-gradient-to-r from-white to-pink-50/30 shrink-0">
         <div>
-          <h3 className="text-lg font-bold text-slate-800">
+          <h3 className="text-base sm:text-lg font-bold text-slate-800">
             {date.getMonth() + 1}月{date.getDate()}日の予定
           </h3>
           <p className="text-xs text-slate-400">
             {todos.filter((t) => !t.completed).length} tasks remaining
           </p>
         </div>
-        <button onClick={onClose} className="md:hidden p-2 text-slate-400">
+        <button
+          onClick={onClose}
+          className="md:hidden p-2 text-slate-400 hover:text-slate-600 active:scale-95 transition-transform"
+        >
           <svg
             className="w-6 h-6"
             fill="none"

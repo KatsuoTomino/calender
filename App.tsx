@@ -243,9 +243,9 @@ const App: React.FC = () => {
       </header>
 
       {/* Main Content Area */}
-      <main className="flex-1 flex overflow-hidden relative p-2 sm:p-4 gap-4 max-w-7xl mx-auto w-full">
+      <main className="flex-1 flex flex-col md:flex-row overflow-hidden relative p-2 sm:p-4 gap-4 max-w-7xl mx-auto w-full">
         {/* Calendar Section */}
-        <div className="flex-1 h-full transition-all duration-300 ease-in-out">
+        <div className="flex-1 h-full min-h-0">
           <Calendar
             currentDate={currentDate}
             selectedDate={selectedDate}
@@ -272,7 +272,7 @@ const App: React.FC = () => {
         {/* Todo Section - Mobile (Slide Over / Modal) */}
         <div
           className={`
-            md:hidden absolute inset-0 bg-black/20 backdrop-blur-sm z-30 transition-opacity duration-300
+            md:hidden fixed inset-0 bg-black/20 backdrop-blur-sm z-30 transition-opacity duration-200
             ${
               showTodoPanel
                 ? "opacity-100 pointer-events-auto"
@@ -283,7 +283,8 @@ const App: React.FC = () => {
         >
           <div
             className={`
-              absolute right-0 top-0 bottom-0 w-4/5 max-w-sm bg-white shadow-2xl transform transition-transform duration-300
+              absolute right-0 top-0 bottom-0 w-4/5 max-w-sm bg-white shadow-2xl 
+              transform transition-transform duration-200 ease-out will-change-transform
               ${showTodoPanel ? "translate-x-0" : "translate-x-full"}
             `}
             onClick={(e) => e.stopPropagation()}

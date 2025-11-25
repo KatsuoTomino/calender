@@ -1,41 +1,45 @@
-import React, { useState } from 'react';
-import { User } from '../types';
-import Button from './Button';
+import React, { useState } from "react";
+import { User } from "../types";
+import { signInWithEmail } from "../services/authService";
+import Button from "./Button";
 
 interface LoginProps {
   onLogin: (user: User) => void;
 }
 
 const Login: React.FC<LoginProps> = ({ onLogin }) => {
-  const [userId, setUserId] = useState('');
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
+  const [userId, setUserId] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError('');
+    setError("");
 
     if (!userId.trim() || !password.trim()) {
-        setError('IDとパスワードを入力してください');
-        return;
+      setError("メールアドレスとパスワードを入力してください");
+      return;
     }
 
-    // Note: In a real application, you would verify credentials against a backend here.
-    // For this demo, we create a deterministic user based on the input ID.
-    
-    // Generate a consistent color based on userId hash
-    const colors = ['bg-pink-500', 'bg-blue-500', 'bg-teal-500', 'bg-purple-500', 'bg-indigo-500', 'bg-orange-500'];
-    const hash = userId.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
-    const color = colors[hash % colors.length];
+    // Supabase Authで認証
+    const { user: authUser, error: authError } = await signInWithEmail(
+      userId,
+      password
+    );
 
-    // Create user object
+    if (authError || !authUser) {
+      setError("メールアドレスまたはパスワードが間違っています");
+      return;
+    }
+
+    // アプリケーション用のユーザーオブジェクトを作成
     const user: User = {
-      id: userId,
-      name: userId, // Use ID as the display name
-      role: 'partner', // Default role since we removed the selector
-      avatarColor: color,
+      id: authUser.id,
+      name: authUser.user_metadata?.name || "管理者",
+      role: "partner",
+      avatarColor: "bg-purple-500",
     };
-    
+
     onLogin(user);
   };
 
@@ -47,29 +51,37 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
             🗓️
           </div>
           <h1 className="text-2xl font-bold text-slate-800">Kizuna Calendar</h1>
-          <p className="text-slate-500 mt-2 text-sm">IDとパスワードでログイン</p>
+          <p className="text-slate-500 mt-2 text-sm">
+            認証済みユーザー専用ログイン
+          </p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-5">
           <div>
-            <label className="block text-sm font-bold text-slate-700 mb-1">ユーザーID</label>
+            <label className="block text-sm font-bold text-slate-700 mb-1">
+              メールアドレス
+            </label>
             <input
-              type="text"
+              type="email"
               value={userId}
               onChange={(e) => setUserId(e.target.value)}
               className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-primary focus:ring-2 focus:ring-pink-100 outline-none transition-all text-slate-700 placeholder:text-slate-300"
-              placeholder="example_user"
+              placeholder="admin@example.com"
+              autoComplete="email"
             />
           </div>
 
           <div>
-            <label className="block text-sm font-bold text-slate-700 mb-1">パスワード</label>
+            <label className="block text-sm font-bold text-slate-700 mb-1">
+              パスワード
+            </label>
             <input
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-primary focus:ring-2 focus:ring-pink-100 outline-none transition-all text-slate-700 placeholder:text-slate-300"
               placeholder="••••••••"
+              autoComplete="current-password"
             />
           </div>
 
@@ -79,15 +91,19 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
             </div>
           )}
 
-          <Button type="submit" className="w-full py-3 text-lg shadow-lg shadow-pink-200/50 mt-4">
+          <Button
+            type="submit"
+            className="w-full py-3 text-lg shadow-lg shadow-pink-200/50 mt-4"
+          >
             ログイン
           </Button>
         </form>
-        
+
         <div className="mt-8 text-center">
           <p className="text-xs text-slate-400 leading-relaxed">
-            初めての方も、お好きなIDとパスワードを入力すれば<br/>
-            自動的に新しいアカウントとして開始できます。
+            登録済みのユーザーのみがログインできます
+            <br />
+            セキュアな認証システムで保護されています
           </p>
         </div>
       </div>

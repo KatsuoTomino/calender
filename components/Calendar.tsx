@@ -101,7 +101,7 @@ const Calendar: React.FC<CalendarProps> = ({
     d.getFullYear() === selectedDate.getFullYear();
 
   return (
-    <div className="bg-white rounded-2xl md:rounded-3xl shadow-sm p-2 sm:p-4 h-full flex flex-col">
+    <div className="bg-white rounded-2xl md:rounded-3xl shadow-sm p-2 sm:p-4 min-h-[600px] md:h-full flex flex-col">
       {/* Header */}
       <div className="flex items-center justify-between mb-2 sm:mb-4 px-1 sm:px-2 shrink-0">
         <h2 className="text-xl sm:text-2xl font-bold text-slate-800 flex items-baseline gap-1 sm:gap-2">

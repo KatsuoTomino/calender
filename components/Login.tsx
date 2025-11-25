@@ -44,8 +44,8 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
   };
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-br from-pink-50 to-teal-50 p-4">
-      <div className="w-full max-w-md bg-white rounded-2xl shadow-xl p-8">
+    <div className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-br from-pink-50 to-teal-50 p-4 overflow-auto">
+      <div className="w-full max-w-md bg-white rounded-2xl shadow-xl p-6 sm:p-8 my-4">
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center mb-4">
             <img

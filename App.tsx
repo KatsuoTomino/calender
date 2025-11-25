@@ -243,19 +243,17 @@ const App: React.FC = () => {
       </header>
 
       {/* Main Content Area */}
-      <main className="flex-1 flex flex-col md:flex-row overflow-hidden relative p-2 gap-4 md:max-w-7xl md:mx-auto w-full">
+      <main className="flex-1 flex flex-col md:flex-row overflow-auto relative p-2 gap-4 md:max-w-7xl md:mx-auto w-full">
         {/* Calendar Section */}
-        <div className="flex-1 h-full min-h-0 flex items-center justify-center">
-          <div className="w-full h-full max-w-5xl">
-            <Calendar
-              currentDate={currentDate}
-              selectedDate={selectedDate}
-              onSelectDate={handleDateSelect}
-              onMonthChange={handleMonthChange}
-              onDeleteMonthTodos={handleDeleteMonthTodos}
-              todos={todos}
-            />
-          </div>
+        <div className="flex-1 w-full md:h-full md:min-h-0">
+          <Calendar
+            currentDate={currentDate}
+            selectedDate={selectedDate}
+            onSelectDate={handleDateSelect}
+            onMonthChange={handleMonthChange}
+            onDeleteMonthTodos={handleDeleteMonthTodos}
+            todos={todos}
+          />
         </div>
 
         {/* Todo Section - Desktop (Side by Side) */}

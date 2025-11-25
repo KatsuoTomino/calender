@@ -175,11 +175,11 @@ const Calendar: React.FC<CalendarProps> = ({
       </div>
 
       {/* Weekday Headers */}
-      <div className="grid grid-cols-7 mb-1 sm:mb-2 shrink-0">
+      <div className="grid grid-cols-7 mb-1 md:mb-2 shrink-0">
         {WEEKDAYS.map((day, idx) => (
           <div
             key={day}
-            className={`text-center text-[10px] sm:text-xs font-bold ${
+            className={`text-center text-[10px] md:text-xs font-bold ${
               idx === 0
                 ? "text-red-400"
                 : idx === 6
@@ -202,7 +202,7 @@ const Calendar: React.FC<CalendarProps> = ({
               key={`${day.dateStr}-${idx}`}
               onClick={() => onSelectDate(day.date)}
               className={`
-                relative flex flex-col items-start justify-start p-0.5 sm:p-1 text-left transition-colors
+                relative flex flex-col items-start justify-start p-0.5 md:p-1 text-left transition-colors
                 ${
                   !day.isCurrentMonth
                     ? "bg-slate-50 text-slate-400"
@@ -214,7 +214,7 @@ const Calendar: React.FC<CalendarProps> = ({
               {/* Date Number */}
               <span
                 className={`
-                  text-[10px] sm:text-xs font-medium w-5 h-5 sm:w-6 sm:h-6 flex items-center justify-center rounded-full mb-0.5 sm:mb-1
+                  text-[10px] md:text-xs font-medium w-5 h-5 md:w-6 md:h-6 flex items-center justify-center rounded-full mb-0.5 md:mb-1
                   ${
                     day.isToday
                       ? "bg-primary text-white shadow-md"
@@ -229,12 +229,12 @@ const Calendar: React.FC<CalendarProps> = ({
 
               {/* Todo Bars */}
               <div className="w-full flex flex-col gap-0.5 overflow-hidden">
-                {/* モバイル: 1件のみ表示、デスクトップ: 2件表示 */}
+                {/* モバイル(縦・横): 1件のみ表示、デスクトップ: 2件表示 */}
                 {day.todos.slice(0, 1).map((todo) => (
                   <div
                     key={todo.id}
                     className={`
-                      sm:hidden w-full px-1 py-0.5 rounded text-[8px] truncate font-medium leading-tight
+                      md:hidden w-full px-1 py-0.5 rounded text-[8px] truncate font-medium leading-tight
                       ${
                         todo.completed
                           ? "bg-slate-100 text-slate-400 line-through decoration-slate-400"
@@ -250,7 +250,7 @@ const Calendar: React.FC<CalendarProps> = ({
                   <div
                     key={todo.id}
                     className={`
-                      hidden sm:block w-full px-1.5 py-0.5 rounded text-[10px] truncate font-medium leading-tight
+                      hidden md:block w-full px-1.5 py-0.5 rounded text-[10px] truncate font-medium leading-tight
                       ${
                         todo.completed
                           ? "bg-slate-100 text-slate-400 line-through decoration-slate-400"
@@ -263,16 +263,16 @@ const Calendar: React.FC<CalendarProps> = ({
                   </div>
                 ))}
 
-                {/* Overflow Indicator - モバイル */}
+                {/* Overflow Indicator - モバイル(縦・横) */}
                 {day.todos.length > 1 && (
-                  <div className="sm:hidden text-[8px] text-slate-400 px-1 font-medium">
+                  <div className="md:hidden text-[8px] text-slate-400 px-1 font-medium">
                     +{day.todos.length - 1}
                   </div>
                 )}
 
                 {/* Overflow Indicator - デスクトップ */}
                 {day.todos.length > 2 && (
-                  <div className="hidden sm:block text-[10px] text-slate-400 px-1 font-medium">
+                  <div className="hidden md:block text-[10px] text-slate-400 px-1 font-medium">
                     +{day.todos.length - 2} more
                   </div>
                 )}

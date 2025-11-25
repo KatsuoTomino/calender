@@ -102,12 +102,20 @@ export async function deleteMonthTodos(
   month: number
 ): Promise<boolean> {
   try {
+    // Helper to format date as YYYY-MM-DD in local timezone
+    const formatLocalDate = (date: Date): string => {
+      const y = date.getFullYear();
+      const m = String(date.getMonth() + 1).padStart(2, "0");
+      const d = String(date.getDate()).padStart(2, "0");
+      return `${y}-${m}-${d}`;
+    };
+
     // 月の最初の日と最後の日を計算
     const startDate = new Date(year, month - 1, 1); // month は 1-12
     const endDate = new Date(year, month, 0); // 月の最後の日
 
-    const startDateStr = startDate.toISOString().split("T")[0];
-    const endDateStr = endDate.toISOString().split("T")[0];
+    const startDateStr = formatLocalDate(startDate);
+    const endDateStr = formatLocalDate(endDate);
 
     console.log(
       `🗑️ ${year}年${month}月のTodoを削除中... (${startDateStr} ~ ${endDateStr})`

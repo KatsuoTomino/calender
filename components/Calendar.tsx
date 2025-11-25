@@ -32,6 +32,14 @@ const Calendar: React.FC<CalendarProps> = ({
 
     const days: DayData[] = [];
 
+    // Helper to format date as YYYY-MM-DD in local timezone
+    const formatLocalDate = (date: Date): string => {
+      const y = date.getFullYear();
+      const m = String(date.getMonth() + 1).padStart(2, "0");
+      const d = String(date.getDate()).padStart(2, "0");
+      return `${y}-${m}-${d}`;
+    };
+
     // Helper to get todos for a date string
     const getTodosForDate = (dStr: string) => {
       return todos
@@ -45,7 +53,7 @@ const Calendar: React.FC<CalendarProps> = ({
     // Previous month padding
     for (let i = 0; i < startingDayIndex; i++) {
       const d = new Date(year, month, -startingDayIndex + 1 + i);
-      const dStr = d.toISOString().split("T")[0];
+      const dStr = formatLocalDate(d);
       days.push({
         date: d,
         isCurrentMonth: false,
@@ -56,10 +64,11 @@ const Calendar: React.FC<CalendarProps> = ({
     }
 
     // Current month days
-    const todayStr = new Date().toISOString().split("T")[0];
+    const today = new Date();
+    const todayStr = formatLocalDate(today);
     for (let i = 1; i <= daysInMonth; i++) {
       const d = new Date(year, month, i);
-      const dStr = d.toISOString().split("T")[0];
+      const dStr = formatLocalDate(d);
       days.push({
         date: d,
         isCurrentMonth: true,
@@ -73,7 +82,7 @@ const Calendar: React.FC<CalendarProps> = ({
     const remainingSlots = 42 - days.length;
     for (let i = 1; i <= remainingSlots; i++) {
       const d = new Date(year, month + 1, i);
-      const dStr = d.toISOString().split("T")[0];
+      const dStr = formatLocalDate(d);
       days.push({
         date: d,
         isCurrentMonth: false,

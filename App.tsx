@@ -201,8 +201,14 @@ const App: React.FC = () => {
     }
   };
 
-  // Filter todos for selected date
-  const selectedDateStr = selectedDate.toISOString().split("T")[0];
+  // Filter todos for selected date (use local timezone)
+  const formatLocalDate = (date: Date): string => {
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, "0");
+    const d = String(date.getDate()).padStart(2, "0");
+    return `${y}-${m}-${d}`;
+  };
+  const selectedDateStr = formatLocalDate(selectedDate);
   const dayTodos = todos.filter((t) => t.dateStr === selectedDateStr);
 
   if (!user) {

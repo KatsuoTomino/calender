@@ -15,13 +15,34 @@ export async function fetchTodos(): Promise<TodoItem[]> {
     }
 
     // データベースのカラム名をアプリの型に変換
-    return (data || []).map((todo) => ({
-      id: todo.id,
-      dateStr: todo.date_str,
-      text: todo.text,
-      completed: todo.completed,
-      createdBy: todo.created_by,
-    }));
+    return (data || []).map((todo) => {
+      // image_urlを配列に変換（既存の文字列データとの互換性を保つ）
+      let imageUrls: string[] | undefined = undefined;
+      if (todo.image_url) {
+        if (typeof todo.image_url === "string") {
+          // 既存の文字列データの場合は配列に変換
+          try {
+            // JSON文字列の可能性をチェック
+            const parsed = JSON.parse(todo.image_url);
+            imageUrls = Array.isArray(parsed) ? parsed : [todo.image_url];
+          } catch {
+            // JSONでない場合は単一の文字列として扱う
+            imageUrls = [todo.image_url];
+          }
+        } else if (Array.isArray(todo.image_url)) {
+          imageUrls = todo.image_url;
+        }
+      }
+
+      return {
+        id: todo.id,
+        dateStr: todo.date_str,
+        text: todo.text,
+        completed: todo.completed,
+        createdBy: todo.created_by,
+        imageUrls,
+      };
+    });
   } catch (err) {
     console.error("予期しないエラー:", err);
     return [];
@@ -31,13 +52,18 @@ export async function fetchTodos(): Promise<TodoItem[]> {
 // Todoを追加
 export async function addTodo(todo: TodoItem): Promise<boolean> {
   try {
-    const insertData = {
+    const insertData: any = {
       id: todo.id,
       date_str: todo.dateStr,
       text: todo.text,
       completed: todo.completed,
       created_by: todo.createdBy,
     };
+
+    // imageUrlsがある場合は追加（JSON配列として保存）
+    if (todo.imageUrls && todo.imageUrls.length > 0) {
+      insertData.image_url = JSON.stringify(todo.imageUrls);
+    }
 
     const { error } = await supabase.from("todos").insert(insertData).select();
 
@@ -69,6 +95,41 @@ export async function toggleTodo(
 
     if (error) {
       console.error("Todoの更新エラー:", error);
+      return false;
+    }
+
+    return true;
+  } catch (err) {
+    console.error("予期しないエラー:", err);
+    return false;
+  }
+}
+
+// Todoの画像を更新（配列全体を更新）
+export async function updateTodoImages(
+  id: string,
+  imageUrls: string[] | null
+): Promise<boolean> {
+  try {
+    const updateData: any = {
+      updated_at: new Date().toISOString(),
+    };
+
+    if (imageUrls === null || imageUrls.length === 0) {
+      // 画像を全て削除
+      updateData.image_url = null;
+    } else {
+      // 画像配列をJSON文字列として保存
+      updateData.image_url = JSON.stringify(imageUrls);
+    }
+
+    const { error } = await supabase
+      .from("todos")
+      .update(updateData)
+      .eq("id", id);
+
+    if (error) {
+      console.error("Todo画像の更新エラー:", error);
       return false;
     }
 

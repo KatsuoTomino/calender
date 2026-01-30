@@ -11,6 +11,7 @@ export interface TodoItem {
   text: string;
   completed: boolean;
   createdBy: string; // User ID
+  imageUrls?: string[]; // R2に保存された画像のキー配列（オプション）
 }
 
 export interface DayData {

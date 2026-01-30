@@ -26,6 +26,9 @@ const App: React.FC = () => {
   const [selectedDate, setSelectedDate] = useState(new Date()); // For Todo selection
   const [todos, setTodos] = useState<TodoItem[]>([]);
   const [showTodoPanel, setShowTodoPanel] = useState(false); // For mobile toggle
+  const [showImportantPanel, setShowImportantPanel] = useState(false); // 重要なことパネル
+  const [showShoppingPanel, setShowShoppingPanel] = useState(false); // 買い物リストパネル
+  const [showMonthTasksPanel, setShowMonthTasksPanel] = useState(false); // 月のタスクパネル
 
   // 認証状態の監視
   useEffect(() => {
@@ -263,6 +266,18 @@ const App: React.FC = () => {
   };
   const selectedDateStr = formatLocalDate(selectedDate);
   const dayTodos = todos.filter((t) => t.dateStr === selectedDateStr);
+  const importantTodos = todos.filter((t) => t.dateStr === 'important');
+  const shoppingTodos = todos.filter((t) => t.dateStr === 'shopping');
+  
+  // 月ごとのタスクを取得（YYYY-MM形式）
+  const formatMonthStr = (date: Date): string => {
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, "0");
+    return `${y}-${m}`;
+  };
+  const currentMonthStr = formatMonthStr(currentDate);
+  // YYYY-MM形式のタスクのみを取得（正確に7文字）
+  const monthTodos = todos.filter((t) => t.dateStr === currentMonthStr);
 
   if (!user) {
     return <Login onLogin={handleLogin} />;
@@ -271,14 +286,14 @@ const App: React.FC = () => {
   return (
     <div className="h-screen w-screen bg-slate-50 flex flex-col overflow-hidden relative">
       {/* App Header */}
-      <header className="bg-white/80 backdrop-blur-md border-b border-slate-200 p-4 flex justify-between items-center z-20 h-16 shrink-0">
-        <div className="flex items-center gap-3">
+      <header className="bg-white/80 backdrop-blur-md border-b border-slate-200 p-4 flex justify-between items-center z-20 shrink-0">
+        <div className="flex items-center gap-3 flex-1">
           <div
-            className={`w-8 h-8 rounded-full ${user.avatarColor} flex items-center justify-center text-white font-bold text-xs`}
+            className={`w-8 h-8 rounded-full ${user.avatarColor} flex items-center justify-center text-white font-bold text-xs shrink-0`}
           >
             {user.name.charAt(0)}
           </div>
-          <div>
+          <div className="flex-1 min-w-0">
             <h1 className="font-bold text-slate-700 text-sm sm:text-base">
               Tomy's Calendar
             </h1>
@@ -286,10 +301,40 @@ const App: React.FC = () => {
               Welcome back, {user.name}
             </p>
           </div>
+          <div className="flex gap-2 shrink-0">
+            <button
+              onClick={() => setShowImportantPanel(true)}
+              className="px-3 py-1.5 text-xs font-bold text-white bg-red-500 hover:bg-red-600 rounded-lg transition-colors shadow-sm flex items-center gap-1.5"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+              重要なこと
+              {importantTodos.length > 0 && (
+                <span className="bg-white/20 px-1.5 py-0.5 rounded-full text-[10px]">
+                  {importantTodos.filter(t => !t.completed).length}
+                </span>
+              )}
+            </button>
+            <button
+              onClick={() => setShowShoppingPanel(true)}
+              className="px-3 py-1.5 text-xs font-bold text-white bg-blue-500 hover:bg-blue-600 rounded-lg transition-colors shadow-sm flex items-center gap-1.5"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
+              </svg>
+              買い物リスト
+              {shoppingTodos.length > 0 && (
+                <span className="bg-white/20 px-1.5 py-0.5 rounded-full text-[10px]">
+                  {shoppingTodos.filter(t => !t.completed).length}
+                </span>
+              )}
+            </button>
+          </div>
         </div>
         <button
           onClick={handleLogout}
-          className="text-xs text-slate-400 hover:text-slate-600 underline"
+          className="text-xs text-slate-400 hover:text-slate-600 underline ml-4 shrink-0"
         >
           ログアウト
         </button>
@@ -305,6 +350,7 @@ const App: React.FC = () => {
             onSelectDate={handleDateSelect}
             onMonthChange={handleMonthChange}
             onDeleteMonthTodos={handleDeleteMonthTodos}
+            onOpenMonthTasks={() => setShowMonthTasksPanel(true)}
             todos={todos}
           />
         </div>
@@ -355,6 +401,138 @@ const App: React.FC = () => {
             />
           </div>
         </div>
+
+        {/* 重要なことパネル - Desktop */}
+        {showImportantPanel && (
+          <div 
+            className="hidden md:block fixed inset-0 z-40 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4"
+            onClick={() => setShowImportantPanel(false)}
+          >
+            <div 
+              className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl h-[80vh] flex flex-col overflow-hidden"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <TodoList
+                dateStr="important"
+                title="重要なこと"
+                todos={importantTodos}
+                onAddTodo={handleAddTodo}
+                onToggleTodo={handleToggleTodo}
+                onDeleteTodo={handleDeleteTodo}
+                onUpdateTodoImages={handleUpdateTodoImages}
+                currentUser={user}
+                onClose={() => setShowImportantPanel(false)}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* 重要なことパネル - Mobile */}
+        {showImportantPanel && (
+          <div className="md:hidden fixed inset-0 z-40 bg-black/50 backdrop-blur-sm">
+            <div className="absolute inset-0 bg-white shadow-2xl flex flex-col overflow-hidden">
+              <TodoList
+                dateStr="important"
+                title="重要なこと"
+                todos={importantTodos}
+                onAddTodo={handleAddTodo}
+                onToggleTodo={handleToggleTodo}
+                onDeleteTodo={handleDeleteTodo}
+                onUpdateTodoImages={handleUpdateTodoImages}
+                currentUser={user}
+                onClose={() => setShowImportantPanel(false)}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* 買い物リストパネル - Desktop */}
+        {showShoppingPanel && (
+          <div 
+            className="hidden md:block fixed inset-0 z-40 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4"
+            onClick={() => setShowShoppingPanel(false)}
+          >
+            <div 
+              className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl h-[80vh] flex flex-col overflow-hidden"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <TodoList
+                dateStr="shopping"
+                title="買い物リスト"
+                todos={shoppingTodos}
+                onAddTodo={handleAddTodo}
+                onToggleTodo={handleToggleTodo}
+                onDeleteTodo={handleDeleteTodo}
+                onUpdateTodoImages={handleUpdateTodoImages}
+                currentUser={user}
+                onClose={() => setShowShoppingPanel(false)}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* 買い物リストパネル - Mobile */}
+        {showShoppingPanel && (
+          <div className="md:hidden fixed inset-0 z-40 bg-black/50 backdrop-blur-sm">
+            <div className="absolute inset-0 bg-white shadow-2xl flex flex-col overflow-hidden">
+              <TodoList
+                dateStr="shopping"
+                title="買い物リスト"
+                todos={shoppingTodos}
+                onAddTodo={handleAddTodo}
+                onToggleTodo={handleToggleTodo}
+                onDeleteTodo={handleDeleteTodo}
+                onUpdateTodoImages={handleUpdateTodoImages}
+                currentUser={user}
+                onClose={() => setShowShoppingPanel(false)}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* 月のタスクパネル - Desktop */}
+        {showMonthTasksPanel && (
+          <div 
+            className="hidden md:block fixed inset-0 z-40 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4"
+            onClick={() => setShowMonthTasksPanel(false)}
+          >
+            <div 
+              className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl h-[80vh] flex flex-col overflow-hidden"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <TodoList
+                dateStr={currentMonthStr}
+                title={`${currentDate.getFullYear()}年${currentDate.getMonth() + 1}月のタスク`}
+                todos={monthTodos}
+                onAddTodo={handleAddTodo}
+                onToggleTodo={handleToggleTodo}
+                onDeleteTodo={handleDeleteTodo}
+                onUpdateTodoImages={handleUpdateTodoImages}
+                currentUser={user}
+                onClose={() => setShowMonthTasksPanel(false)}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* 月のタスクパネル - Mobile */}
+        {showMonthTasksPanel && (
+          <div className="md:hidden fixed inset-0 z-40 bg-black/50 backdrop-blur-sm">
+            <div className="absolute inset-0 bg-white shadow-2xl flex flex-col overflow-hidden">
+              <TodoList
+                dateStr={currentMonthStr}
+                title={`${currentDate.getFullYear()}年${currentDate.getMonth() + 1}月のタスク`}
+                todos={monthTodos}
+                onAddTodo={handleAddTodo}
+                onToggleTodo={handleToggleTodo}
+                onDeleteTodo={handleDeleteTodo}
+                onUpdateTodoImages={handleUpdateTodoImages}
+                currentUser={user}
+                onClose={() => setShowMonthTasksPanel(false)}
+              />
+            </div>
+          </div>
+        )}
       </main>
     </div>
   );

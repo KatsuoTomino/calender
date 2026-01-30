@@ -5,7 +5,9 @@ import { uploadImageToR2, getImageUrl, deleteImageFromR2 } from "../services/r2S
 import Button from "./Button";
 
 interface TodoListProps {
-  date: Date;
+  date?: Date; // 日付ベースのタスクの場合
+  dateStr?: string; // 直接dateStrを指定する場合（'important' | 'shopping'）
+  title?: string; // カスタムタイトル（dateStrが指定されている場合に使用）
   todos: TodoItem[];
   onAddTodo: (todo: TodoItem) => void;
   onToggleTodo: (id: string) => void;
@@ -32,6 +34,8 @@ interface ToastState {
 
 const TodoList: React.FC<TodoListProps> = ({
   date,
+  dateStr,
+  title,
   todos,
   onAddTodo,
   onToggleTodo,
@@ -74,6 +78,47 @@ const TodoList: React.FC<TodoListProps> = ({
     const m = String(date.getMonth() + 1).padStart(2, "0");
     const d = String(date.getDate()).padStart(2, "0");
     return `${y}-${m}-${d}`;
+  };
+
+  // URLを検出してリンクに変換する関数
+  const linkifyText = (text: string): React.ReactNode[] => {
+    // URLの正規表現パターン（http/httpsで始まるURL）
+    const urlPattern = /(https?:\/\/[^\s]+)/g;
+    const parts: React.ReactNode[] = [];
+    let lastIndex = 0;
+    let match;
+    let key = 0;
+
+    while ((match = urlPattern.exec(text)) !== null) {
+      // URLの前のテキスト
+      if (match.index > lastIndex) {
+        parts.push(text.substring(lastIndex, match.index));
+      }
+      
+      // URLをリンクに変換
+      const url = match[0];
+      parts.push(
+        <a
+          key={key++}
+          href={url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-blue-600 hover:text-blue-800 underline break-all"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {url}
+        </a>
+      );
+      
+      lastIndex = match.index + match[0].length;
+    }
+
+    // 残りのテキスト
+    if (lastIndex < text.length) {
+      parts.push(text.substring(lastIndex));
+    }
+
+    return parts.length > 0 ? parts : [text];
   };
 
   useEffect(() => {
@@ -165,9 +210,12 @@ const TodoList: React.FC<TodoListProps> = ({
     setIsUploading(true);
     const todoId = generateId();
 
+    // dateStrが直接指定されている場合はそれを使用、そうでなければdateから生成
+    const targetDateStr = dateStr || (date ? formatLocalDate(date) : '');
+
     const newItem: TodoItem = {
       id: todoId,
-      dateStr: formatLocalDate(date),
+      dateStr: targetDateStr,
       text: newTodoText,
       completed: false,
       createdBy: currentUser.id,
@@ -346,30 +394,56 @@ const TodoList: React.FC<TodoListProps> = ({
       <div className="p-4 sm:p-6 border-b border-slate-50 flex justify-between items-center bg-gradient-to-r from-white to-pink-50/30 shrink-0">
         <div>
           <h3 className="text-base sm:text-lg font-bold text-slate-800">
-            {date.getMonth() + 1}月{date.getDate()}日の予定
+            {title || (date ? `${date.getMonth() + 1}月${date.getDate()}日の予定` : 'タスク')}
           </h3>
           <p className="text-xs text-slate-400">
             {todos.filter((t) => !t.completed).length} tasks remaining
           </p>
         </div>
-        <button
-          onClick={onClose}
-          className="md:hidden p-2 text-slate-400 hover:text-slate-600 active:scale-95 transition-transform"
-        >
-          <svg
-            className="w-6 h-6"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
+        {/* モーダル表示の場合（important, shopping, 月のタスク）は常に×ボタンを表示 */}
+        {(dateStr === 'important' || dateStr === 'shopping' || (dateStr && dateStr.match(/^\d{4}-\d{2}$/))) && (
+          <button
+            onClick={onClose}
+            className="p-2 text-slate-400 hover:text-slate-600 active:scale-95 transition-transform"
+            aria-label="閉じる"
           >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M6 18L18 6M6 6l12 12"
-            />
-          </svg>
-        </button>
+            <svg
+              className="w-6 h-6"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M6 18L18 6M6 6l12 12"
+              />
+            </svg>
+          </button>
+        )}
+        {/* 日付ベースのタスクはモバイルのみ×ボタンを表示 */}
+        {!dateStr && (
+          <button
+            onClick={onClose}
+            className="md:hidden p-2 text-slate-400 hover:text-slate-600 active:scale-95 transition-transform"
+            aria-label="閉じる"
+          >
+            <svg
+              className="w-6 h-6"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M6 18L18 6M6 6l12 12"
+              />
+            </svg>
+          </button>
+        )}
       </div>
 
       {/* Input Area */}
@@ -455,7 +529,7 @@ const TodoList: React.FC<TodoListProps> = ({
                       : "text-slate-700"
                   }`}
                 >
-                  {todo.text}
+                  {linkifyText(todo.text)}
                 </span>
                 {/* 画像一覧と追加ボタン */}
                 <div className="mt-1 flex flex-col gap-2">

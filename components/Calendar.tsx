@@ -1,6 +1,7 @@
 import React, { useMemo } from "react";
 import { WEEKDAYS } from "../constants";
 import { DayData, TodoItem } from "../types";
+import { getHolidayName, isWeekend } from "../utils/holidays";
 
 interface CalendarProps {
   currentDate: Date;
@@ -8,6 +9,7 @@ interface CalendarProps {
   onSelectDate: (date: Date) => void;
   onMonthChange: (offset: number) => void;
   onDeleteMonthTodos: () => void;
+  onOpenMonthTasks?: () => void;
   todos: TodoItem[];
 }
 
@@ -17,6 +19,7 @@ const Calendar: React.FC<CalendarProps> = ({
   onSelectDate,
   onMonthChange,
   onDeleteMonthTodos,
+  onOpenMonthTasks,
   todos,
 }) => {
   // Generate days for the grid
@@ -54,12 +57,16 @@ const Calendar: React.FC<CalendarProps> = ({
     for (let i = 0; i < startingDayIndex; i++) {
       const d = new Date(year, month, -startingDayIndex + 1 + i);
       const dStr = formatLocalDate(d);
+      const holidayName = getHolidayName(d);
       days.push({
         date: d,
         isCurrentMonth: false,
         isToday: false,
         dateStr: dStr,
         todos: getTodosForDate(dStr),
+        isHoliday: !!holidayName,
+        holidayName,
+        isWeekend: isWeekend(d),
       });
     }
 
@@ -69,12 +76,16 @@ const Calendar: React.FC<CalendarProps> = ({
     for (let i = 1; i <= daysInMonth; i++) {
       const d = new Date(year, month, i);
       const dStr = formatLocalDate(d);
+      const holidayName = getHolidayName(d);
       days.push({
         date: d,
         isCurrentMonth: true,
         isToday: dStr === todayStr,
         dateStr: dStr,
         todos: getTodosForDate(dStr),
+        isHoliday: !!holidayName,
+        holidayName,
+        isWeekend: isWeekend(d),
       });
     }
 
@@ -83,12 +94,16 @@ const Calendar: React.FC<CalendarProps> = ({
     for (let i = 1; i <= remainingSlots; i++) {
       const d = new Date(year, month + 1, i);
       const dStr = formatLocalDate(d);
+      const holidayName = getHolidayName(d);
       days.push({
         date: d,
         isCurrentMonth: false,
         isToday: false,
         dateStr: dStr,
         todos: getTodosForDate(dStr),
+        isHoliday: !!holidayName,
+        holidayName,
+        isWeekend: isWeekend(d),
       });
     }
 
@@ -109,6 +124,28 @@ const Calendar: React.FC<CalendarProps> = ({
           <span className="text-primary text-2xl sm:text-3xl">
             {currentDate.getMonth() + 1}月
           </span>
+          {onOpenMonthTasks && (
+            <button
+              onClick={onOpenMonthTasks}
+              className="ml-2 p-1.5 sm:p-2 text-yellow-600 hover:bg-yellow-50 rounded-lg transition-colors"
+              title="月のタスク管理"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                className="h-5 w-5 sm:h-6 sm:w-6"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                />
+              </svg>
+            </button>
+          )}
         </h2>
         <div className="flex gap-1 sm:gap-2 items-center">
           <button
@@ -206,26 +243,38 @@ const Calendar: React.FC<CalendarProps> = ({
                 ${
                   !day.isCurrentMonth
                     ? "bg-slate-50 text-slate-400"
+                    : day.isHoliday
+                    ? "bg-red-50 text-red-700"
+                    : day.isWeekend
+                    ? "bg-blue-50 text-blue-700"
                     : "bg-white text-slate-700"
                 }
-                ${isDaySelected ? "bg-pink-50" : "hover:bg-slate-50"}
+                ${isDaySelected ? "bg-pink-50 ring-2 ring-pink-300" : "hover:bg-slate-50"}
               `}
+              title={day.holidayName || undefined}
             >
               {/* Date Number */}
-              <span
-                className={`
-                  text-[10px] md:text-xs font-medium w-5 h-5 md:w-6 md:h-6 flex items-center justify-center rounded-full mb-0.5 md:mb-1
-                  ${
-                    day.isToday
-                      ? "bg-primary text-white shadow-md"
-                      : isDaySelected
-                      ? "text-primary font-bold"
-                      : ""
-                  }
-                `}
-              >
-                {day.date.getDate()}
-              </span>
+              <div className="flex items-center gap-1 mb-0.5 md:mb-1">
+                <span
+                  className={`
+                    text-[10px] md:text-xs font-medium w-5 h-5 md:w-6 md:h-6 flex items-center justify-center rounded-full
+                    ${
+                      day.isToday
+                        ? "bg-primary text-white shadow-md"
+                        : isDaySelected
+                        ? "text-primary font-bold"
+                        : ""
+                    }
+                  `}
+                >
+                  {day.date.getDate()}
+                </span>
+                {day.holidayName && (
+                  <span className="text-[8px] md:text-[9px] font-medium text-red-600 truncate max-w-[60px] md:max-w-[80px]">
+                    {day.holidayName}
+                  </span>
+                )}
+              </div>
 
               {/* Todo Bars */}
               <div className="w-full flex flex-col gap-0.5 overflow-hidden">

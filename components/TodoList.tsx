@@ -45,7 +45,13 @@ const TodoList: React.FC<TodoListProps> = ({
   const [uploadingTodoId, setUploadingTodoId] = useState<string | null>(null);
   // 各タスクの画像URL（R2キー -> 表示用URL）のマッピング
   const [imageDisplayUrls, setImageDisplayUrls] = useState<Record<string, Record<string, string>>>({});
-  const [expandedImageUrl, setExpandedImageUrl] = useState<string | null>(null);
+  // 拡大表示用の画像情報
+  const [expandedImage, setExpandedImage] = useState<{
+    todoId: string;
+    imageKey: string;
+    displayUrl: string;
+    todoText: string;
+  } | null>(null);
   const [confirmModal, setConfirmModal] = useState<ConfirmModalState>({
     isOpen: false,
     title: "",
@@ -78,8 +84,8 @@ const TodoList: React.FC<TodoListProps> = ({
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
-        if (expandedImageUrl) {
-          setExpandedImageUrl(null);
+        if (expandedImage) {
+          setExpandedImage(null);
         }
         if (confirmModal.isOpen) {
           setConfirmModal((prev) => ({ ...prev, isOpen: false }));
@@ -88,7 +94,7 @@ const TodoList: React.FC<TodoListProps> = ({
     };
     window.addEventListener("keydown", handleEscape);
     return () => window.removeEventListener("keydown", handleEscape);
-  }, [expandedImageUrl, confirmModal.isOpen]);
+  }, [expandedImage, confirmModal.isOpen]);
 
   // 通知トーストを表示
   const showToast = (message: string, type: "success" | "error" = "success") => {
@@ -242,37 +248,11 @@ const TodoList: React.FC<TodoListProps> = ({
     }
   };
 
-  // 画像をダウンロード
-  const handleDownloadImage = async (imageKey: string, todoText: string) => {
-    try {
-      const displayUrl = Object.values(imageDisplayUrls).flatMap(urls => Object.values(urls)).find(url => url.includes(imageKey)) || imageKey;
-      
-      // 画像を取得
-      const response = await fetch(displayUrl);
-      const blob = await response.blob();
-      
-      // ファイル名を生成（タスク名 + タイムスタンプ）
-      const url = new URL(displayUrl);
-      const pathParts = url.pathname.split('/');
-      const fileName = pathParts[pathParts.length - 1] || 'image.jpg';
-      const sanitizedTodoText = todoText.replace(/[^a-zA-Z0-9]/g, '_').substring(0, 20);
-      const downloadFileName = `${sanitizedTodoText}_${fileName}`;
-      
-      // ダウンロード
-      const downloadUrl = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = downloadUrl;
-      link.download = downloadFileName;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      window.URL.revokeObjectURL(downloadUrl);
-      
-      showToast("画像をダウンロードしました");
-    } catch (error) {
-      console.error("画像ダウンロードエラー:", error);
-      showToast("画像のダウンロードに失敗しました", "error");
-    }
+  // 画像をダウンロード（新しいタブで開く）
+  const handleDownloadImage = (displayUrl: string) => {
+    // 新しいタブで画像を開く（ユーザーが右クリックで保存可能）
+    window.open(displayUrl, '_blank');
+    showToast("画像を新しいタブで開きました");
   };
 
   const handleRemoveTodoImage = (todoId: string, imageKey: string) => {
@@ -489,8 +469,13 @@ const TodoList: React.FC<TodoListProps> = ({
                         return (
                           <div 
                             key={imageKey} 
-                            className="relative group/image"
-                            onClick={() => setExpandedImageUrl(displayUrl)}
+                            className="relative"
+                            onClick={() => setExpandedImage({
+                              todoId: todo.id,
+                              imageKey,
+                              displayUrl,
+                              todoText: todo.text,
+                            })}
                           >
                             <img
                               src={displayUrl}
@@ -500,53 +485,6 @@ const TodoList: React.FC<TodoListProps> = ({
                                 e.currentTarget.style.display = "none";
                               }}
                             />
-                            <div className="absolute inset-0 bg-black/0 group-hover/image:bg-black/20 rounded-lg transition-colors flex items-center justify-center gap-1 opacity-0 group-hover/image:opacity-100 pointer-events-none">
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleDownloadImage(imageKey, todo.text);
-                                }}
-                                className="p-1 bg-white/90 hover:bg-white rounded-full transition-colors pointer-events-auto"
-                                title="ダウンロード"
-                              >
-                                <svg
-                                  className="w-4 h-4 text-slate-700"
-                                  fill="none"
-                                  stroke="currentColor"
-                                  viewBox="0 0 24 24"
-                                >
-                                  <path
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                    strokeWidth={2}
-                                    d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
-                                  />
-                                </svg>
-                              </button>
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleRemoveTodoImage(todo.id, imageKey);
-                                }}
-                                className="p-1 bg-red-500/90 hover:bg-red-600 rounded-full transition-colors pointer-events-auto"
-                                title="削除"
-                                disabled={uploadingTodoId === todo.id}
-                              >
-                                <svg
-                                  className="w-4 h-4 text-white"
-                                  fill="none"
-                                  stroke="currentColor"
-                                  viewBox="0 0 24 24"
-                                >
-                                  <path
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                    strokeWidth={2}
-                                    d="M6 18L18 6M6 6l12 12"
-                                  />
-                                </svg>
-                              </button>
-                            </div>
                           </div>
                         );
                       })}
@@ -641,14 +579,15 @@ const TodoList: React.FC<TodoListProps> = ({
       </div>
 
       {/* 画像拡大モーダル */}
-      {expandedImageUrl && (
+      {expandedImage && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm"
-          onClick={() => setExpandedImageUrl(null)}
+          onClick={() => setExpandedImage(null)}
         >
+          {/* 閉じるボタン */}
           <button
-            onClick={() => setExpandedImageUrl(null)}
-            className="absolute top-4 right-4 p-2 text-white hover:bg-white/20 rounded-full transition-colors"
+            onClick={() => setExpandedImage(null)}
+            className="absolute top-4 right-4 p-2 text-white hover:bg-white/20 rounded-full transition-colors z-10"
             aria-label="閉じる"
           >
             <svg
@@ -665,15 +604,64 @@ const TodoList: React.FC<TodoListProps> = ({
               />
             </svg>
           </button>
+          
+          {/* 操作ボタン（上部） */}
           <div
-            className="relative max-w-[90vw] max-h-[90vh] p-4"
+            className="absolute top-4 left-4 flex gap-2 z-10"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              onClick={() => handleDownloadImage(expandedImage.displayUrl)}
+              className="flex items-center gap-2 px-4 py-2 bg-white/90 hover:bg-white text-slate-700 rounded-lg transition-colors"
+            >
+              <svg
+                className="w-5 h-5"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
+                />
+              </svg>
+              <span className="text-sm font-medium">開く</span>
+            </button>
+            <button
+              onClick={() => {
+                setExpandedImage(null);
+                handleRemoveTodoImage(expandedImage.todoId, expandedImage.imageKey);
+              }}
+              className="flex items-center gap-2 px-4 py-2 bg-red-500/90 hover:bg-red-600 text-white rounded-lg transition-colors"
+            >
+              <svg
+                className="w-5 h-5"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                />
+              </svg>
+              <span className="text-sm font-medium">削除</span>
+            </button>
+          </div>
+          
+          {/* 画像 */}
+          <div
+            className="relative max-w-[90vw] max-h-[80vh] p-4"
             onClick={(e) => e.stopPropagation()}
           >
             <img
-              src={expandedImageUrl}
+              src={expandedImage.displayUrl}
               alt="拡大画像"
-              className="max-w-full max-h-[90vh] object-contain rounded-lg shadow-2xl"
-              onClick={(e) => e.stopPropagation()}
+              className="max-w-full max-h-[80vh] object-contain rounded-lg shadow-2xl"
             />
           </div>
         </div>

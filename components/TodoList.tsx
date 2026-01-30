@@ -543,18 +543,29 @@ const TodoList: React.FC<TodoListProps> = ({
                         return (
                           <div 
                             key={imageKey} 
-                            className="relative"
+                            className="relative touch-manipulation"
                             onClick={() => setExpandedImage({
                               todoId: todo.id,
                               imageKey,
                               displayUrl,
                               todoText: todo.text,
                             })}
+                            onTouchStart={(e) => {
+                              // タッチイベントでも拡大モーダルを開く
+                              e.preventDefault();
+                              setExpandedImage({
+                                todoId: todo.id,
+                                imageKey,
+                                displayUrl,
+                                todoText: todo.text,
+                              });
+                            }}
                           >
                             <img
                               src={displayUrl}
                               alt={todo.text}
-                              className="w-24 h-24 object-cover rounded-lg cursor-pointer hover:opacity-90 transition-opacity"
+                              className="w-24 h-24 object-cover rounded-lg cursor-pointer hover:opacity-90 active:opacity-70 transition-opacity touch-manipulation"
+                              draggable={false}
                               onError={(e) => {
                                 e.currentTarget.style.display = "none";
                               }}
@@ -655,17 +666,23 @@ const TodoList: React.FC<TodoListProps> = ({
       {/* 画像拡大モーダル */}
       {expandedImage && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-sm touch-none"
           onClick={() => setExpandedImage(null)}
+          onTouchStart={(e) => {
+            // 背景タッチで閉じる
+            if (e.target === e.currentTarget) {
+              setExpandedImage(null);
+            }
+          }}
         >
           {/* 閉じるボタン */}
           <button
             onClick={() => setExpandedImage(null)}
-            className="absolute top-4 right-4 p-2 text-white hover:bg-white/20 rounded-full transition-colors z-10"
+            className="absolute top-2 right-2 sm:top-4 sm:right-4 p-2 sm:p-3 text-white hover:bg-white/20 active:bg-white/30 rounded-full transition-colors z-10 touch-manipulation"
             aria-label="閉じる"
           >
             <svg
-              className="w-6 h-6"
+              className="w-6 h-6 sm:w-7 sm:h-7"
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
@@ -681,15 +698,16 @@ const TodoList: React.FC<TodoListProps> = ({
           
           {/* 操作ボタン（上部） */}
           <div
-            className="absolute top-4 left-4 flex gap-2 z-10"
+            className="absolute top-2 left-2 sm:top-4 sm:left-4 flex flex-col sm:flex-row gap-2 z-10"
             onClick={(e) => e.stopPropagation()}
+            onTouchStart={(e) => e.stopPropagation()}
           >
             <button
               onClick={() => handleDownloadImage(expandedImage.displayUrl)}
-              className="flex items-center gap-2 px-4 py-2 bg-white/90 hover:bg-white text-slate-700 rounded-lg transition-colors"
+              className="flex items-center justify-center gap-1.5 sm:gap-2 px-3 py-2 sm:px-4 sm:py-2 bg-white/95 hover:bg-white active:bg-white/80 text-slate-700 rounded-lg transition-colors touch-manipulation shadow-lg"
             >
               <svg
-                className="w-5 h-5"
+                className="w-4 h-4 sm:w-5 sm:h-5"
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
@@ -701,17 +719,17 @@ const TodoList: React.FC<TodoListProps> = ({
                   d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
                 />
               </svg>
-              <span className="text-sm font-medium">開く</span>
+              <span className="text-xs sm:text-sm font-medium">開く</span>
             </button>
             <button
               onClick={() => {
                 setExpandedImage(null);
                 handleRemoveTodoImage(expandedImage.todoId, expandedImage.imageKey);
               }}
-              className="flex items-center gap-2 px-4 py-2 bg-red-500/90 hover:bg-red-600 text-white rounded-lg transition-colors"
+              className="flex items-center justify-center gap-1.5 sm:gap-2 px-3 py-2 sm:px-4 sm:py-2 bg-red-500/95 hover:bg-red-600 active:bg-red-700 text-white rounded-lg transition-colors touch-manipulation shadow-lg"
             >
               <svg
-                className="w-5 h-5"
+                className="w-4 h-4 sm:w-5 sm:h-5"
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
@@ -723,19 +741,21 @@ const TodoList: React.FC<TodoListProps> = ({
                   d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
                 />
               </svg>
-              <span className="text-sm font-medium">削除</span>
+              <span className="text-xs sm:text-sm font-medium">削除</span>
             </button>
           </div>
           
           {/* 画像 */}
           <div
-            className="relative max-w-[90vw] max-h-[80vh] p-4"
+            className="relative w-full h-full flex items-center justify-center p-2 sm:p-4"
             onClick={(e) => e.stopPropagation()}
+            onTouchStart={(e) => e.stopPropagation()}
           >
             <img
               src={expandedImage.displayUrl}
               alt="拡大画像"
-              className="max-w-full max-h-[80vh] object-contain rounded-lg shadow-2xl"
+              className="max-w-full max-h-[90vh] sm:max-h-[80vh] w-auto h-auto object-contain rounded-lg shadow-2xl touch-manipulation"
+              style={{ userSelect: 'none' }}
             />
           </div>
         </div>

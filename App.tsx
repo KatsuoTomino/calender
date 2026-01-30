@@ -301,31 +301,25 @@ const App: React.FC = () => {
               Welcome back, {user.name}
             </p>
           </div>
-          <div className="flex gap-2 shrink-0">
+          <div className="flex gap-1.5 sm:gap-2 shrink-0">
             <button
               onClick={() => setShowImportantPanel(true)}
-              className="px-3 py-1.5 text-xs font-bold text-white bg-red-500 hover:bg-red-600 rounded-lg transition-colors shadow-sm flex items-center gap-1.5"
+              className="relative px-2 py-1 sm:px-3 sm:py-1.5 text-[10px] sm:text-xs font-bold text-white bg-red-500 hover:bg-red-600 rounded-lg transition-colors shadow-sm flex items-center gap-1"
             >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-              </svg>
-              重要なこと
+              重要
               {importantTodos.length > 0 && (
-                <span className="bg-white/20 px-1.5 py-0.5 rounded-full text-[10px]">
+                <span className="bg-white/20 px-1 sm:px-1.5 py-0.5 rounded-full text-[9px] sm:text-[10px]">
                   {importantTodos.filter(t => !t.completed).length}
                 </span>
               )}
             </button>
             <button
               onClick={() => setShowShoppingPanel(true)}
-              className="px-3 py-1.5 text-xs font-bold text-white bg-blue-500 hover:bg-blue-600 rounded-lg transition-colors shadow-sm flex items-center gap-1.5"
+              className="relative px-2 py-1 sm:px-3 sm:py-1.5 text-[10px] sm:text-xs font-bold text-white bg-blue-500 hover:bg-blue-600 rounded-lg transition-colors shadow-sm flex items-center gap-1"
             >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
-              </svg>
-              買い物リスト
+              買い物
               {shoppingTodos.length > 0 && (
-                <span className="bg-white/20 px-1.5 py-0.5 rounded-full text-[10px]">
+                <span className="bg-white/20 px-1 sm:px-1.5 py-0.5 rounded-full text-[9px] sm:text-[10px]">
                   {shoppingTodos.filter(t => !t.completed).length}
                 </span>
               )}

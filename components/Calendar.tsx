@@ -9,7 +9,6 @@ interface CalendarProps {
   onSelectDate: (date: Date) => void;
   onMonthChange: (offset: number) => void;
   onDeleteMonthTodos: () => void;
-  onOpenMonthTasks?: () => void;
   todos: TodoItem[];
 }
 
@@ -19,7 +18,6 @@ const Calendar: React.FC<CalendarProps> = ({
   onSelectDate,
   onMonthChange,
   onDeleteMonthTodos,
-  onOpenMonthTasks,
   todos,
 }) => {
   // Generate days for the grid
@@ -124,15 +122,6 @@ const Calendar: React.FC<CalendarProps> = ({
           <span className="text-primary text-2xl sm:text-3xl">
             {currentDate.getMonth() + 1}月
           </span>
-          {onOpenMonthTasks && (
-            <button
-              onClick={onOpenMonthTasks}
-              className="ml-2 px-2 py-1 sm:px-3 sm:py-1.5 text-yellow-600 hover:bg-yellow-50 rounded-lg transition-colors font-bold text-lg sm:text-xl"
-              title="月のタスク管理"
-            >
-              $
-            </button>
-          )}
         </h2>
         <div className="flex gap-1 sm:gap-2 items-center">
           <button

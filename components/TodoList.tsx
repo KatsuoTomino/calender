@@ -400,8 +400,8 @@ const TodoList: React.FC<TodoListProps> = ({
             {todos.filter((t) => !t.completed).length} tasks remaining
           </p>
         </div>
-        {/* モーダル表示の場合（important, shopping, 月のタスク）は常に×ボタンを表示 */}
-        {(dateStr === 'important' || dateStr === 'shopping' || (dateStr && dateStr.match(/^\d{4}-\d{2}$/))) && (
+        {/* モーダル表示の場合（important, shopping, monthly）は常に×ボタンを表示 */}
+        {(dateStr === 'important' || dateStr === 'shopping' || dateStr === 'monthly') && (
           <button
             onClick={onClose}
             className="p-2 text-slate-400 hover:text-slate-600 active:scale-95 transition-transform"

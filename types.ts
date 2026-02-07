@@ -3,13 +3,14 @@ export interface User {
   name: string;
   role: 'husband' | 'wife' | 'partner';
   avatarColor: string;
+  avatarImageUrl?: string; // R2に保存されたアバター画像のキー
 }
 
 export type TodoType = 'daily' | 'important' | 'shopping';
 
 export interface TodoItem {
   id: string;
-  dateStr: string; // YYYY-MM-DD または 'important' | 'shopping'
+  dateStr: string; // YYYY-MM-DD または 'important' | 'shopping' | 'monthly'
   text: string;
   completed: boolean;
   createdBy: string; // User ID

@@ -28,6 +28,58 @@ const s3Client = accountId && accessKeyId && secretAccessKey && bucketName && en
   : null;
 
 /**
+ * ユーザーアバター画像をR2にアップロード
+ * @param file アップロードする画像ファイル
+ * @param userId ユーザーID（ファイル名に使用）
+ * @returns アップロードされた画像のURL（R2キーパス）、失敗時はnull
+ */
+export async function uploadAvatarToR2(
+  file: File,
+  userId: string
+): Promise<string | null> {
+  if (!s3Client || !bucketName) {
+    console.error("R2設定が不完全です。環境変数を確認してください。");
+    return null;
+  }
+
+  try {
+    console.log("📤 アバター画像アップロード開始:", file.name);
+
+    // ファイル名を生成（users/{userId}/avatar.{拡張子}）
+    const fileExtension = file.name.split(".").pop() || "jpg";
+    const fileName = `users/${userId}/avatar.${fileExtension}`;
+
+    console.log("📁 ファイル名:", fileName);
+
+    // ファイルをArrayBufferに変換（ブラウザ環境対応）
+    const arrayBuffer = await file.arrayBuffer();
+    const uint8Array = new Uint8Array(arrayBuffer);
+
+    console.log("📦 ファイルサイズ:", uint8Array.length, "bytes");
+
+    // R2にアップロード
+    const command = new PutObjectCommand({
+      Bucket: bucketName,
+      Key: fileName,
+      Body: uint8Array,
+      ContentType: file.type || "image/jpeg",
+    });
+
+    await s3Client.send(command);
+    console.log("✅ R2へのアバター画像アップロード成功");
+
+    return fileName;
+  } catch (error: any) {
+    console.error("❌ R2へのアバター画像アップロードエラー:", error);
+    console.error("エラー詳細:", error.message);
+    if (error.$metadata) {
+      console.error("リクエストID:", error.$metadata.requestId);
+    }
+    return null;
+  }
+}
+
+/**
  * 画像ファイルをR2にアップロード
  * @param file アップロードする画像ファイル
  * @param todoId TodoのID（ファイル名に使用）

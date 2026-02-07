@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { User, TodoItem } from "./types";
-import { saveUser } from "./services/storageService";
+import { saveUser, getStoredUser } from "./services/storageService";
 import {
   fetchTodos,
   addTodo,
@@ -15,7 +15,7 @@ import {
   onAuthStateChange,
   signOut,
 } from "./services/authService";
-import { deleteImageFromR2 } from "./services/r2Service";
+import { deleteImageFromR2, uploadAvatarToR2, getImageUrl } from "./services/r2Service";
 import Login from "./components/Login";
 import Calendar from "./components/Calendar";
 import TodoList from "./components/TodoList";
@@ -29,6 +29,8 @@ const App: React.FC = () => {
   const [showImportantPanel, setShowImportantPanel] = useState(false); // 重要なことパネル
   const [showShoppingPanel, setShowShoppingPanel] = useState(false); // 買い物リストパネル
   const [showMonthTasksPanel, setShowMonthTasksPanel] = useState(false); // 月のタスクパネル
+  const [avatarImageUrl, setAvatarImageUrl] = useState<string | null>(null); // アバター画像の表示用URL
+  const avatarFileInputRef = useRef<HTMLInputElement>(null);
 
   // 認証状態の監視
   useEffect(() => {
@@ -38,17 +40,21 @@ const App: React.FC = () => {
     // 認証状態の変更を監視
     const { data: authListener } = onAuthStateChange(async (authUser) => {
       if (authUser) {
+        // 既存のユーザー情報を読み込む（アバター画像を含む）
+        const storedUser = getStoredUser();
         const appUser: User = {
           id: authUser.id,
           name: authUser.user_metadata?.name || "ユーザー",
-          role: "partner",
-          avatarColor: "bg-purple-500",
+          role: storedUser?.role || "partner",
+          avatarColor: storedUser?.avatarColor || "bg-purple-500",
+          avatarImageUrl: storedUser?.avatarImageUrl,
         };
         setUser(appUser);
         saveUser(appUser);
       } else {
         setUser(null);
         setTodos([]);
+        setAvatarImageUrl(null);
       }
     });
 
@@ -62,6 +68,23 @@ const App: React.FC = () => {
     if (user) {
       loadTodos();
 
+      // アバター画像を読み込む
+      const loadAvatarImage = async () => {
+        if (!user.avatarImageUrl) {
+          setAvatarImageUrl(null);
+          return;
+        }
+
+        try {
+          const url = await getImageUrl(user.avatarImageUrl);
+          setAvatarImageUrl(url);
+        } catch (error) {
+          console.error("アバター画像の読み込みエラー:", error);
+          setAvatarImageUrl(null);
+        }
+      };
+      loadAvatarImage();
+
       // リアルタイム更新を購読
       const channel = subscribeTodoChanges((updatedTodos) => {
         setTodos(updatedTodos);
@@ -73,14 +96,97 @@ const App: React.FC = () => {
     }
   }, [user]);
 
+  // アバター画像をアップロード
+  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    console.log("📸 アバター画像アップロード開始");
+    const files = e.target.files;
+    
+    if (!files || files.length === 0) {
+      console.log("⚠️ ファイルが選択されていません");
+      return;
+    }
+    
+    if (!user) {
+      console.error("❌ ユーザーがログインしていません");
+      alert("ログインが必要です");
+      return;
+    }
+
+    const file = files[0];
+    console.log("📁 選択されたファイル:", file.name, "サイズ:", file.size, "タイプ:", file.type);
+    
+    // 画像ファイルかチェック
+    if (!file.type.startsWith("image/")) {
+      alert("画像ファイルを選択してください");
+      return;
+    }
+    
+    // ファイルサイズチェック（5MB制限）
+    if (file.size > 5 * 1024 * 1024) {
+      alert("画像のサイズは5MB以下にしてください");
+      return;
+    }
+
+    try {
+      console.log("🔄 古いアバター画像を削除中...");
+      // 古いアバター画像を削除
+      if (user.avatarImageUrl) {
+        await deleteImageFromR2(user.avatarImageUrl);
+      }
+
+      console.log("📤 R2にアップロード中...");
+      // R2にアップロード
+      const uploadedKey = await uploadAvatarToR2(file, user.id);
+      if (!uploadedKey) {
+        console.error("❌ アップロードに失敗しました");
+        alert("画像のアップロードに失敗しました。R2の設定を確認してください。");
+        return;
+      }
+
+      console.log("✅ アップロード成功:", uploadedKey);
+
+      // ユーザー情報を更新
+      const updatedUser: User = {
+        ...user,
+        avatarImageUrl: uploadedKey,
+      };
+      setUser(updatedUser);
+      saveUser(updatedUser);
+      console.log("💾 ユーザー情報を保存しました");
+
+      // 表示用URLを取得
+      console.log("🖼️ 表示用URLを取得中...");
+      const displayUrl = await getImageUrl(uploadedKey);
+      if (displayUrl) {
+        setAvatarImageUrl(displayUrl);
+        console.log("✅ アバター画像を更新しました");
+        alert("アバター画像を更新しました");
+      } else {
+        console.warn("⚠️ 表示用URLの取得に失敗しましたが、アップロードは成功しています");
+        alert("アバター画像をアップロードしましたが、表示に問題がある可能性があります");
+      }
+    } catch (error) {
+      console.error("❌ アバター画像アップロードエラー:", error);
+      alert(`画像のアップロードに失敗しました: ${error instanceof Error ? error.message : "不明なエラー"}`);
+    }
+
+    // ファイル入力のリセット
+    if (avatarFileInputRef.current) {
+      avatarFileInputRef.current.value = "";
+    }
+  };
+
   const checkCurrentUser = async () => {
     const authUser = await getCurrentUser();
     if (authUser) {
+      // 既存のユーザー情報を読み込む（アバター画像を含む）
+      const storedUser = getStoredUser();
       const appUser: User = {
         id: authUser.id,
         name: authUser.user_metadata?.name || "ユーザー",
-        role: "partner",
-        avatarColor: "bg-purple-500",
+        role: storedUser?.role || "partner",
+        avatarColor: storedUser?.avatarColor || "bg-purple-500",
+        avatarImageUrl: storedUser?.avatarImageUrl,
       };
       setUser(appUser);
       saveUser(appUser);
@@ -268,16 +374,7 @@ const App: React.FC = () => {
   const dayTodos = todos.filter((t) => t.dateStr === selectedDateStr);
   const importantTodos = todos.filter((t) => t.dateStr === 'important');
   const shoppingTodos = todos.filter((t) => t.dateStr === 'shopping');
-  
-  // 月ごとのタスクを取得（YYYY-MM形式）
-  const formatMonthStr = (date: Date): string => {
-    const y = date.getFullYear();
-    const m = String(date.getMonth() + 1).padStart(2, "0");
-    return `${y}-${m}`;
-  };
-  const currentMonthStr = formatMonthStr(currentDate);
-  // YYYY-MM形式のタスクのみを取得（正確に7文字）
-  const monthTodos = todos.filter((t) => t.dateStr === currentMonthStr);
+  const monthTodos = todos.filter((t) => t.dateStr === 'monthly');
 
   if (!user) {
     return <Login onLogin={handleLogin} />;
@@ -288,38 +385,85 @@ const App: React.FC = () => {
       {/* App Header */}
       <header className="bg-white/80 backdrop-blur-md border-b border-slate-200 p-4 flex justify-between items-center z-20 shrink-0">
         <div className="flex items-center gap-3 flex-1">
-          <div
-            className={`w-8 h-8 rounded-full ${user.avatarColor} flex items-center justify-center text-white font-bold text-xs shrink-0`}
+          <input
+            type="file"
+            accept="image/*"
+            ref={avatarFileInputRef}
+            onChange={handleAvatarUpload}
+            className="hidden"
+          />
+          <button
+            onClick={() => avatarFileInputRef.current?.click()}
+            className="relative w-8 h-8 rounded-full shrink-0 overflow-hidden cursor-pointer hover:opacity-80 transition-opacity"
+            title="アバター画像を変更"
           >
-            {user.name.charAt(0)}
-          </div>
-          <div className="flex-1 min-w-0">
-            <h1 className="font-bold text-slate-700 text-sm sm:text-base">
-              Tomy's Calendar
-            </h1>
-            <p className="text-[10px] text-slate-500">
-              Welcome back, {user.name}
-            </p>
-          </div>
+            {avatarImageUrl ? (
+              <img
+                src={avatarImageUrl}
+                alt={user.name}
+                className="w-full h-full object-cover"
+              />
+            ) : (
+              <div
+                className={`w-full h-full ${user.avatarColor} flex items-center justify-center text-white font-bold text-xs`}
+              >
+                {user.name.charAt(0)}
+              </div>
+            )}
+          </button>
           <div className="flex gap-1.5 sm:gap-2 shrink-0">
             <button
               onClick={() => setShowImportantPanel(true)}
-              className="relative px-2 py-1 sm:px-3 sm:py-1.5 text-[10px] sm:text-xs font-bold text-white bg-red-500 hover:bg-red-600 rounded-lg transition-colors shadow-sm flex items-center gap-1"
+              className="relative px-2 py-1 sm:px-3 sm:py-1.5 text-white bg-red-500 hover:bg-red-600 rounded-lg transition-colors shadow-sm flex items-center justify-center shrink-0 min-w-[32px] sm:min-w-[36px]"
+              title="重要なこと"
             >
-              重要
+              <svg
+                className="w-4 h-4 sm:w-5 sm:h-5"
+                fill="currentColor"
+                viewBox="0 0 20 20"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+              </svg>
               {importantTodos.length > 0 && (
-                <span className="bg-white/20 px-1 sm:px-1.5 py-0.5 rounded-full text-[9px] sm:text-[10px]">
+                <span className="absolute -top-1 -right-1 bg-white/90 text-red-600 px-1 sm:px-1.5 py-0.5 rounded-full text-[9px] sm:text-[10px] font-bold min-w-[16px] text-center">
                   {importantTodos.filter(t => !t.completed).length}
                 </span>
               )}
             </button>
             <button
-              onClick={() => setShowShoppingPanel(true)}
-              className="relative px-2 py-1 sm:px-3 sm:py-1.5 text-[10px] sm:text-xs font-bold text-white bg-blue-500 hover:bg-blue-600 rounded-lg transition-colors shadow-sm flex items-center gap-1"
+              onClick={() => setShowMonthTasksPanel(true)}
+              className="relative px-2 py-1 sm:px-3 sm:py-1.5 text-[10px] sm:text-xs font-bold text-white bg-yellow-500 hover:bg-yellow-600 rounded-lg transition-colors shadow-sm flex items-center gap-1 shrink-0 min-w-[32px]"
+              title="月のタスク管理"
             >
-              買い物
-              {shoppingTodos.length > 0 && (
+              $
+              {monthTodos.length > 0 && (
                 <span className="bg-white/20 px-1 sm:px-1.5 py-0.5 rounded-full text-[9px] sm:text-[10px]">
+                  {monthTodos.filter(t => !t.completed).length}
+                </span>
+              )}
+            </button>
+            <button
+              onClick={() => setShowShoppingPanel(true)}
+              className="relative px-2 py-1 sm:px-3 sm:py-1.5 text-white bg-blue-500 hover:bg-blue-600 rounded-lg transition-colors shadow-sm flex items-center justify-center shrink-0 min-w-[32px] sm:min-w-[36px]"
+              title="買い物リスト"
+            >
+              <svg
+                className="w-4 h-4 sm:w-5 sm:h-5"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z"
+                />
+              </svg>
+              {shoppingTodos.length > 0 && (
+                <span className="absolute -top-1 -right-1 bg-white/90 text-blue-600 px-1 sm:px-1.5 py-0.5 rounded-full text-[9px] sm:text-[10px] font-bold min-w-[16px] text-center">
                   {shoppingTodos.filter(t => !t.completed).length}
                 </span>
               )}
@@ -338,13 +482,12 @@ const App: React.FC = () => {
       <main className="flex-1 flex flex-col md:flex-row overflow-auto relative p-2 gap-4 md:max-w-7xl md:mx-auto w-full">
         {/* Calendar Section */}
         <div className="flex-1 w-full md:h-full md:min-h-0">
-          <Calendar
+            <Calendar
             currentDate={currentDate}
             selectedDate={selectedDate}
             onSelectDate={handleDateSelect}
             onMonthChange={handleMonthChange}
             onDeleteMonthTodos={handleDeleteMonthTodos}
-            onOpenMonthTasks={() => setShowMonthTasksPanel(true)}
             todos={todos}
           />
         </div>
@@ -495,8 +638,8 @@ const App: React.FC = () => {
               onClick={(e) => e.stopPropagation()}
             >
               <TodoList
-                dateStr={currentMonthStr}
-                title={`${currentDate.getFullYear()}年${currentDate.getMonth() + 1}月のタスク`}
+                dateStr="monthly"
+                title="月のタスク"
                 todos={monthTodos}
                 onAddTodo={handleAddTodo}
                 onToggleTodo={handleToggleTodo}
@@ -514,8 +657,8 @@ const App: React.FC = () => {
           <div className="md:hidden fixed inset-0 z-40 bg-black/50 backdrop-blur-sm">
             <div className="absolute inset-0 bg-white shadow-2xl flex flex-col overflow-hidden">
               <TodoList
-                dateStr={currentMonthStr}
-                title={`${currentDate.getFullYear()}年${currentDate.getMonth() + 1}月のタスク`}
+                dateStr="monthly"
+                title="月のタスク"
                 todos={monthTodos}
                 onAddTodo={handleAddTodo}
                 onToggleTodo={handleToggleTodo}

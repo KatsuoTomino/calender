@@ -15,7 +15,7 @@ import {
   onAuthStateChange,
   signOut,
 } from "./services/authService";
-import { deleteImageFromR2, uploadAvatarToR2, getImageUrl } from "./services/r2Service";
+import { deleteImageFromR2, uploadAvatarToR2, getImageUrl, getAvatarFromR2 } from "./services/r2Service";
 import Login from "./components/Login";
 import Calendar from "./components/Calendar";
 import TodoList from "./components/TodoList";
@@ -51,6 +51,32 @@ const App: React.FC = () => {
         };
         setUser(appUser);
         saveUser(appUser);
+        
+        // アバター画像をR2から読み込む
+        console.log(`🖼️ 認証状態変更: アバター画像を読み込み開始... userId: ${appUser.id}`);
+        try {
+          const avatarUrl = await getAvatarFromR2(appUser.id);
+          if (avatarUrl) {
+            setAvatarImageUrl(avatarUrl);
+            console.log("✅ 認証状態変更: アバター画像をR2から読み込みました");
+          } else {
+            // フォールバック: localStorageのキーから取得
+            if (appUser.avatarImageUrl) {
+              const fallbackUrl = await getImageUrl(appUser.avatarImageUrl);
+              if (fallbackUrl) {
+                setAvatarImageUrl(fallbackUrl);
+                console.log("✅ 認証状態変更: アバター画像をlocalStorageのキーから読み込みました");
+              } else {
+                setAvatarImageUrl(null);
+              }
+            } else {
+              setAvatarImageUrl(null);
+            }
+          }
+        } catch (error: any) {
+          console.error("❌ 認証状態変更: アバター画像の読み込みエラー:", error);
+          setAvatarImageUrl(null);
+        }
       } else {
         setUser(null);
         setTodos([]);
@@ -68,18 +94,43 @@ const App: React.FC = () => {
     if (user) {
       loadTodos();
 
-      // アバター画像を読み込む
+      // アバター画像をR2から読み込む
       const loadAvatarImage = async () => {
-        if (!user.avatarImageUrl) {
+        if (!user || !user.id) {
+          console.warn("⚠️ ユーザー情報が不完全です");
           setAvatarImageUrl(null);
           return;
         }
 
+        console.log(`🖼️ アバター画像を読み込み開始... userId: ${user.id}`);
+        
         try {
-          const url = await getImageUrl(user.avatarImageUrl);
-          setAvatarImageUrl(url);
-        } catch (error) {
-          console.error("アバター画像の読み込みエラー:", error);
+          // R2から直接アバター画像を取得
+          const url = await getAvatarFromR2(user.id);
+          if (url) {
+            setAvatarImageUrl(url);
+            console.log("✅ アバター画像をR2から読み込みました:", url.substring(0, 50) + "...");
+          } else {
+            console.log("ℹ️ R2にアバター画像が見つかりませんでした");
+            // R2に存在しない場合は、localStorageに保存されているキーから取得を試みる（後方互換性）
+            if (user.avatarImageUrl) {
+              console.log("🔄 localStorageのキーから取得を試みます:", user.avatarImageUrl);
+              const fallbackUrl = await getImageUrl(user.avatarImageUrl);
+              if (fallbackUrl) {
+                setAvatarImageUrl(fallbackUrl);
+                console.log("✅ アバター画像をlocalStorageのキーから読み込みました");
+              } else {
+                console.log("ℹ️ localStorageのキーからも取得できませんでした");
+                setAvatarImageUrl(null);
+              }
+            } else {
+              console.log("ℹ️ localStorageにもアバター画像のキーがありません");
+              setAvatarImageUrl(null);
+            }
+          }
+        } catch (error: any) {
+          console.error("❌ アバター画像の読み込みエラー:", error);
+          console.error("エラー詳細:", error.message, error);
           setAvatarImageUrl(null);
         }
       };
@@ -129,9 +180,23 @@ const App: React.FC = () => {
 
     try {
       console.log("🔄 古いアバター画像を削除中...");
-      // 古いアバター画像を削除
+      // 古いアバター画像を削除（複数の拡張子を試す）
+      const extensions = ['jpg', 'jpeg', 'png', 'webp', 'gif'];
+      for (const ext of extensions) {
+        const oldAvatarKey = `users/${user.id}/avatar.${ext}`;
+        try {
+          await deleteImageFromR2(oldAvatarKey);
+        } catch (error) {
+          // 404エラーは無視（存在しないファイル）
+        }
+      }
+      // 後方互換性: localStorageに保存されているキーも削除を試みる
       if (user.avatarImageUrl) {
-        await deleteImageFromR2(user.avatarImageUrl);
+        try {
+          await deleteImageFromR2(user.avatarImageUrl);
+        } catch (error) {
+          // エラーは無視
+        }
       }
 
       console.log("📤 R2にアップロード中...");
@@ -145,25 +210,34 @@ const App: React.FC = () => {
 
       console.log("✅ アップロード成功:", uploadedKey);
 
-      // ユーザー情報を更新
+      // ユーザー情報を更新（後方互換性のためlocalStorageにも保存）
       const updatedUser: User = {
         ...user,
         avatarImageUrl: uploadedKey,
       };
       setUser(updatedUser);
       saveUser(updatedUser);
-      console.log("💾 ユーザー情報を保存しました");
+      console.log("💾 ユーザー情報をlocalStorageに保存しました（後方互換性）");
 
-      // 表示用URLを取得
-      console.log("🖼️ 表示用URLを取得中...");
-      const displayUrl = await getImageUrl(uploadedKey);
+      // R2から直接取得して表示（他の端末でも動作する）
+      console.log("🖼️ R2からアバター画像を取得中... userId:", user.id);
+      const displayUrl = await getAvatarFromR2(user.id);
       if (displayUrl) {
         setAvatarImageUrl(displayUrl);
-        console.log("✅ アバター画像を更新しました");
+        console.log("✅ アバター画像を更新しました（R2から取得）");
         alert("アバター画像を更新しました");
       } else {
-        console.warn("⚠️ 表示用URLの取得に失敗しましたが、アップロードは成功しています");
-        alert("アバター画像をアップロードしましたが、表示に問題がある可能性があります");
+        console.warn("⚠️ R2から直接取得できませんでした。アップロードしたキーから取得を試みます...");
+        // フォールバック: アップロードしたキーから取得
+        const fallbackUrl = await getImageUrl(uploadedKey);
+        if (fallbackUrl) {
+          setAvatarImageUrl(fallbackUrl);
+          console.log("✅ アバター画像を更新しました（フォールバック）");
+          alert("アバター画像を更新しました");
+        } else {
+          console.error("❌ 表示用URLの取得に失敗しました。アップロードは成功していますが、表示に問題がある可能性があります");
+          alert("アバター画像をアップロードしましたが、表示に問題がある可能性があります。ページをリロードしてください。");
+        }
       }
     } catch (error) {
       console.error("❌ アバター画像アップロードエラー:", error);
@@ -654,7 +728,7 @@ const App: React.FC = () => {
             >
               <TodoList
                 dateStr="monthly"
-                title="月のタスク"
+                title="お金の管理"
                 todos={monthTodos}
                 onAddTodo={handleAddTodo}
                 onToggleTodo={handleToggleTodo}
@@ -673,7 +747,7 @@ const App: React.FC = () => {
             <div className="absolute inset-0 bg-white shadow-2xl flex flex-col overflow-hidden">
               <TodoList
                 dateStr="monthly"
-                title="月のタスク"
+                title="お金の管理"
                 todos={monthTodos}
                 onAddTodo={handleAddTodo}
                 onToggleTodo={handleToggleTodo}

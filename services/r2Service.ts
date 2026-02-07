@@ -1,4 +1,4 @@
-import { S3Client, PutObjectCommand, DeleteObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3";
+import { S3Client, PutObjectCommand, DeleteObjectCommand, GetObjectCommand, ListObjectsV2Command, HeadObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
 // 環境変数から設定を取得
@@ -224,6 +224,74 @@ export async function deleteImageFromR2(imageKey: string): Promise<boolean> {
   } catch (error) {
     console.error("❌ R2からの画像削除エラー:", error);
     return false;
+  }
+}
+
+/**
+ * ユーザーのアバター画像をR2から取得
+ * @param userId ユーザーID
+ * @returns アバター画像の表示用URL、存在しない場合はnull
+ */
+export async function getAvatarFromR2(userId: string): Promise<string | null> {
+  if (!s3Client || !bucketName) {
+    console.error("❌ R2設定が不完全です。s3Client:", !!s3Client, "bucketName:", bucketName);
+    return null;
+  }
+
+  if (!userId) {
+    console.error("❌ userIdが指定されていません");
+    return null;
+  }
+
+  console.log(`🔍 R2からアバター画像を検索中... userId: ${userId}`);
+
+  try {
+    // 一般的な画像拡張子を試す
+    const extensions = ['jpg', 'jpeg', 'png', 'webp', 'gif'];
+    
+    for (const ext of extensions) {
+      const avatarKey = `users/${userId}/avatar.${ext}`;
+      console.log(`  📁 確認中: ${avatarKey}`);
+      
+      try {
+        // オブジェクトの存在確認
+        const headCommand = new HeadObjectCommand({
+          Bucket: bucketName,
+          Key: avatarKey,
+        });
+        
+        await s3Client.send(headCommand);
+        console.log(`  ✅ ファイルが見つかりました: ${avatarKey}`);
+        
+        // 存在する場合はPresigned URLを生成
+        const getCommand = new GetObjectCommand({
+          Bucket: bucketName,
+          Key: avatarKey,
+        });
+        
+        const presignedUrl = await getSignedUrl(s3Client, getCommand, {
+          expiresIn: 3600 * 24 * 7, // 7日間有効
+        });
+        
+        console.log(`✅ アバター画像をR2から取得成功: ${avatarKey}`);
+        return presignedUrl;
+      } catch (error: any) {
+        // 404エラー（オブジェクトが存在しない）の場合は次の拡張子を試す
+        if (error.name === 'NotFound' || error.$metadata?.httpStatusCode === 404) {
+          console.log(`  ℹ️ ファイルが存在しません: ${avatarKey}`);
+          continue;
+        }
+        // その他のエラーはログに記録
+        console.warn(`⚠️ アバター画像の確認中にエラー (${avatarKey}):`, error.message, error);
+      }
+    }
+    
+    console.log(`ℹ️ アバター画像が見つかりませんでした (userId: ${userId})`);
+    return null;
+  } catch (error: any) {
+    console.error("❌ アバター画像取得エラー:", error);
+    console.error("エラー詳細:", error.message, error);
+    return null;
   }
 }
 

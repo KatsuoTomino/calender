@@ -216,6 +216,13 @@ const App: React.FC = () => {
     setCurrentDate(newDate);
   };
 
+  const handleDateChange = (year: number, month: number) => {
+    const newDate = new Date(currentDate);
+    newDate.setFullYear(year);
+    newDate.setMonth(month);
+    setCurrentDate(newDate);
+  };
+
   const handleDateSelect = (date: Date) => {
     setSelectedDate(date);
     // If month is different, update calendar view
@@ -433,12 +440,19 @@ const App: React.FC = () => {
             </button>
             <button
               onClick={() => setShowMonthTasksPanel(true)}
-              className="relative px-2 py-1 sm:px-3 sm:py-1.5 text-[10px] sm:text-xs font-bold text-white bg-yellow-500 hover:bg-yellow-600 rounded-lg transition-colors shadow-sm flex items-center gap-1 shrink-0 min-w-[32px]"
+              className="relative px-2 py-1 sm:px-3 sm:py-1.5 text-white bg-yellow-500 hover:bg-yellow-600 rounded-lg transition-colors shadow-sm flex items-center justify-center shrink-0 min-w-[32px] sm:min-w-[36px]"
               title="月のタスク管理"
             >
-              $
+              <svg
+                className="w-4 h-4 sm:w-5 sm:h-5"
+                fill="currentColor"
+                viewBox="0 0 24 24"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <path d="M11.8 10.9c-2.27-.59-3-1.2-3-2.15 0-1.09 1.01-1.85 2.7-1.85 1.78 0 2.44.85 2.5 2.1h2.21c-.07-1.72-1.12-3.3-3.21-3.81V3h-3v2.16c-1.94.42-3.5 1.68-3.5 3.61 0 2.31 1.91 3.46 4.7 4.13 2.5.6 3 1.48 3 2.41 0 .69-.49 1.79-2.7 1.79-2.06 0-2.87-.92-2.98-2.1h-2.2c.12 2.19 1.76 3.42 3.68 3.83V21h3v-2.15c1.95-.37 3.5-1.5 3.5-3.55 0-2.84-2.43-3.81-4.7-4.4z"/>
+              </svg>
               {monthTodos.length > 0 && (
-                <span className="bg-white/20 px-1 sm:px-1.5 py-0.5 rounded-full text-[9px] sm:text-[10px]">
+                <span className="absolute -top-1 -right-1 bg-white/90 text-yellow-600 px-1 sm:px-1.5 py-0.5 rounded-full text-[9px] sm:text-[10px] font-bold min-w-[16px] text-center">
                   {monthTodos.filter(t => !t.completed).length}
                 </span>
               )}
@@ -487,6 +501,7 @@ const App: React.FC = () => {
             selectedDate={selectedDate}
             onSelectDate={handleDateSelect}
             onMonthChange={handleMonthChange}
+            onDateChange={handleDateChange}
             onDeleteMonthTodos={handleDeleteMonthTodos}
             todos={todos}
           />

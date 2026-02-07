@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React, { useMemo, useState, useRef, useEffect } from "react";
 import { WEEKDAYS } from "../constants";
 import { DayData, TodoItem } from "../types";
 import { getHolidayName, isWeekend } from "../utils/holidays";
@@ -8,6 +8,7 @@ interface CalendarProps {
   selectedDate: Date;
   onSelectDate: (date: Date) => void;
   onMonthChange: (offset: number) => void;
+  onDateChange?: (year: number, month: number) => void;
   onDeleteMonthTodos: () => void;
   todos: TodoItem[];
 }
@@ -17,9 +18,15 @@ const Calendar: React.FC<CalendarProps> = ({
   selectedDate,
   onSelectDate,
   onMonthChange,
+  onDateChange,
   onDeleteMonthTodos,
   todos,
 }) => {
+  const [showYearMonthPicker, setShowYearMonthPicker] = useState(false);
+  const [tempSelectedYear, setTempSelectedYear] = useState<number | null>(null);
+  const [tempSelectedMonth, setTempSelectedMonth] = useState<number | null>(null);
+  const yearScrollRef = useRef<HTMLDivElement>(null);
+  const monthScrollRef = useRef<HTMLDivElement>(null);
   // Generate days for the grid
   const calendarDays = useMemo(() => {
     const year = currentDate.getFullYear();
@@ -113,16 +120,209 @@ const Calendar: React.FC<CalendarProps> = ({
     d.getMonth() === selectedDate.getMonth() &&
     d.getFullYear() === selectedDate.getFullYear();
 
+  // モーダルを開くときに一時選択をリセット
+  const handleOpenPicker = () => {
+    setTempSelectedYear(currentDate.getFullYear());
+    setTempSelectedMonth(currentDate.getMonth() + 1);
+    setShowYearMonthPicker(true);
+  };
+
+  // モーダルが開いた時に現在の年月を中央にスクロール
+  useEffect(() => {
+    if (showYearMonthPicker) {
+      // 年を中央にスクロール
+      setTimeout(() => {
+        if (yearScrollRef.current) {
+          const currentYear = currentDate.getFullYear();
+          const yearIndex = years.indexOf(currentYear);
+          if (yearIndex !== -1) {
+            const yearButton = yearScrollRef.current.children[yearIndex] as HTMLElement;
+            if (yearButton) {
+              const containerHeight = yearScrollRef.current.clientHeight;
+              const buttonHeight = yearButton.offsetHeight;
+              const scrollPosition = yearButton.offsetTop - (containerHeight / 2) + (buttonHeight / 2);
+              yearScrollRef.current.scrollTop = scrollPosition;
+            }
+          }
+        }
+      }, 10);
+
+      // 月を中央にスクロール
+      setTimeout(() => {
+        if (monthScrollRef.current) {
+          const currentMonth = currentDate.getMonth() + 1;
+          const monthIndex = currentMonth - 1;
+          if (monthIndex >= 0 && monthIndex < months.length) {
+            const monthButton = monthScrollRef.current.children[monthIndex] as HTMLElement;
+            if (monthButton) {
+              const containerHeight = monthScrollRef.current.clientHeight;
+              const buttonHeight = monthButton.offsetHeight;
+              const scrollPosition = monthButton.offsetTop - (containerHeight / 2) + (buttonHeight / 2);
+              monthScrollRef.current.scrollTop = scrollPosition;
+            }
+          }
+        }
+      }, 10);
+    }
+  }, [showYearMonthPicker]);
+
+  // 年を一時選択
+  const handleYearClick = (year: number) => {
+    setTempSelectedYear(year);
+  };
+
+  // 月を一時選択
+  const handleMonthClick = (month: number) => {
+    setTempSelectedMonth(month);
+  };
+
+  // 現在の年月に戻る
+  const handleGoToToday = () => {
+    const today = new Date();
+    const todayYear = today.getFullYear();
+    const todayMonth = today.getMonth() + 1;
+    setTempSelectedYear(todayYear);
+    setTempSelectedMonth(todayMonth);
+    
+    if (onDateChange) {
+      onDateChange(todayYear, today.getMonth());
+    } else {
+      // フォールバック: 現在の日付に移動
+      const newDate = new Date();
+      newDate.setFullYear(todayYear);
+      newDate.setMonth(today.getMonth());
+      onMonthChange(0); // 強制的に更新
+    }
+    setShowYearMonthPicker(false);
+  };
+
+  // 確定ボタンで年月を確定
+  const handleConfirm = () => {
+    if (tempSelectedYear !== null && tempSelectedMonth !== null) {
+      if (onDateChange) {
+        onDateChange(tempSelectedYear, tempSelectedMonth - 1);
+      } else {
+        // フォールバック: 現在の日付から新しい年月に移動
+        const newDate = new Date(currentDate);
+        newDate.setFullYear(tempSelectedYear);
+        newDate.setMonth(tempSelectedMonth - 1);
+        onMonthChange(0); // 強制的に更新
+      }
+      setShowYearMonthPicker(false);
+    }
+  };
+
+  // キャンセル
+  const handleCancel = () => {
+    setTempSelectedYear(null);
+    setTempSelectedMonth(null);
+    setShowYearMonthPicker(false);
+  };
+
+  // 年のリストを生成（現在の年±10年）
+  const currentYear = currentDate.getFullYear();
+  const years = Array.from({ length: 21 }, (_, i) => currentYear - 10 + i);
+  const months = Array.from({ length: 12 }, (_, i) => i + 1);
+
   return (
     <div className="bg-white rounded-2xl md:rounded-3xl shadow-sm p-2 sm:p-4 min-h-[600px] md:h-full flex flex-col">
       {/* Header */}
       <div className="flex items-center justify-between mb-2 sm:mb-4 px-1 sm:px-2 shrink-0">
-        <h2 className="text-xl sm:text-2xl font-bold text-slate-800 flex items-baseline gap-1 sm:gap-2">
-          {currentDate.getFullYear()}年
-          <span className="text-primary text-2xl sm:text-3xl">
-            {currentDate.getMonth() + 1}月
-          </span>
-        </h2>
+        <div className="relative">
+          <button
+            onClick={handleOpenPicker}
+            className="text-xl sm:text-2xl font-bold text-slate-800 flex items-baseline gap-1 sm:gap-2 hover:text-primary transition-colors cursor-pointer"
+            title="年月を選択"
+          >
+            {currentDate.getFullYear()}年
+            <span className="text-primary text-2xl sm:text-3xl">
+              {currentDate.getMonth() + 1}月
+            </span>
+          </button>
+
+          {/* 年月選択モーダル */}
+          {showYearMonthPicker && (
+            <>
+              {/* オーバーレイ */}
+              <div
+                className="fixed inset-0 z-40 bg-black/20 backdrop-blur-sm"
+                onClick={handleCancel}
+              />
+              {/* モーダル */}
+              <div className="absolute top-full left-0 mt-2 bg-white rounded-xl shadow-2xl border border-slate-200 z-50 p-4 min-w-[200px] sm:min-w-[240px] max-w-[90vw]">
+                <div className="flex gap-4 mb-4">
+                  {/* 年選択 */}
+                  <div className="flex-1">
+                    <h3 className="text-xs sm:text-sm font-bold text-slate-700 mb-2 text-center">年</h3>
+                    <div 
+                      ref={yearScrollRef}
+                      className="h-[240px] overflow-y-auto border border-slate-200 rounded-lg"
+                    >
+                      {years.map((year) => (
+                        <button
+                          key={year}
+                          onClick={() => handleYearClick(year)}
+                          className={`w-full px-3 py-2 text-sm font-medium transition-colors border-b border-slate-100 last:border-b-0 ${
+                            year === (tempSelectedYear ?? currentDate.getFullYear())
+                              ? "bg-primary text-white"
+                              : "bg-white text-slate-700 hover:bg-slate-50 active:bg-slate-100"
+                          }`}
+                        >
+                          {year}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  {/* 月選択 */}
+                  <div className="flex-1">
+                    <h3 className="text-xs sm:text-sm font-bold text-slate-700 mb-2 text-center">月</h3>
+                    <div 
+                      ref={monthScrollRef}
+                      className="h-[240px] overflow-y-auto border border-slate-200 rounded-lg"
+                    >
+                      {months.map((month) => (
+                        <button
+                          key={month}
+                          onClick={() => handleMonthClick(month)}
+                          className={`w-full px-3 py-2 text-sm font-medium transition-colors border-b border-slate-100 last:border-b-0 ${
+                            month === (tempSelectedMonth ?? currentDate.getMonth() + 1)
+                              ? "bg-primary text-white"
+                              : "bg-white text-slate-700 hover:bg-slate-50 active:bg-slate-100"
+                          }`}
+                        >
+                          {month}月
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+                {/* 現在・確定・キャンセルボタン */}
+                <div className="flex gap-2 pt-3 border-t border-slate-200">
+                  <button
+                    onClick={handleGoToToday}
+                    className="px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium text-slate-700 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-lg transition-colors"
+                    title="今日の年月に戻る"
+                  >
+                    現在
+                  </button>
+                  <button
+                    onClick={handleCancel}
+                    className="flex-1 px-4 py-2 text-sm font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors"
+                  >
+                    キャンセル
+                  </button>
+                  <button
+                    onClick={handleConfirm}
+                    disabled={tempSelectedYear === null || tempSelectedMonth === null}
+                    className="flex-1 px-4 py-2 text-sm font-medium text-white bg-primary hover:bg-pink-600 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    確定
+                  </button>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
         <div className="flex gap-1 sm:gap-2 items-center">
           <button
             onClick={onDeleteMonthTodos}

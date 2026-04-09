@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { User, TodoItem } from "./types";
+import { User, TodoItem, DateColor, DateColorType } from "./types";
 import { saveUser, getStoredUser } from "./services/storageService";
 import {
   fetchTodos,
@@ -16,6 +16,7 @@ import {
   signOut,
 } from "./services/authService";
 import { deleteImageFromR2, uploadAvatarToR2, getImageUrl, getAvatarFromR2 } from "./services/r2Service";
+import { fetchDateColors, setDateColor, setDateLabel, subscribeDateColorChanges } from "./services/dateColorService";
 import Login from "./components/Login";
 import Calendar from "./components/Calendar";
 import TodoList from "./components/TodoList";
@@ -30,6 +31,7 @@ const App: React.FC = () => {
   const [showShoppingPanel, setShowShoppingPanel] = useState(false); // 買い物リストパネル
   const [showMonthTasksPanel, setShowMonthTasksPanel] = useState(false); // 月のタスクパネル
   const [avatarImageUrl, setAvatarImageUrl] = useState<string | null>(null); // アバター画像の表示用URL
+  const [dateColors, setDateColors] = useState<DateColor[]>([]);
   const avatarFileInputRef = useRef<HTMLInputElement>(null);
 
   // 認証状態の監視
@@ -136,13 +138,20 @@ const App: React.FC = () => {
       };
       loadAvatarImage();
 
+      // date colorsを読み込む
+      loadDateColors();
+
       // リアルタイム更新を購読
-      const channel = subscribeTodoChanges((updatedTodos) => {
+      const todoChannel = subscribeTodoChanges((updatedTodos) => {
         setTodos(updatedTodos);
+      });
+      const dateColorChannel = subscribeDateColorChanges((updatedColors) => {
+        setDateColors(updatedColors);
       });
 
       return () => {
-        channel.unsubscribe();
+        todoChannel.unsubscribe();
+        dateColorChannel.unsubscribe();
       };
     }
   }, [user]);
@@ -270,6 +279,58 @@ const App: React.FC = () => {
   const loadTodos = async () => {
     const todos = await fetchTodos();
     setTodos(todos);
+  };
+
+  const loadDateColors = async () => {
+    const colors = await fetchDateColors();
+    setDateColors(colors);
+  };
+
+  const handleSetDateColor = async (dateStr: string, color: DateColorType) => {
+    if (!user) return;
+
+    // 楽観的更新
+    setDateColors((prev) => {
+      const existing = prev.find((dc) => dc.dateStr === dateStr);
+      if (color === null) {
+        return prev.filter((dc) => dc.dateStr !== dateStr);
+      }
+      if (existing) {
+        return prev.map((dc) =>
+          dc.dateStr === dateStr ? { ...dc, color } : dc
+        );
+      }
+      return [...prev, { id: crypto.randomUUID(), dateStr, color, createdBy: user.id }];
+    });
+
+    const success = await setDateColor(dateStr, color, user.id);
+    if (!success) {
+      await loadDateColors();
+    }
+  };
+
+  const handleSetDateLabel = async (dateStr: string, label: string | null) => {
+    if (!user) return;
+
+    setDateColors((prev) => {
+      const existing = prev.find((dc) => dc.dateStr === dateStr);
+      const trimmed = label?.trim() || null;
+      if (existing) {
+        if (!trimmed && !existing.color) {
+          return prev.filter((dc) => dc.dateStr !== dateStr);
+        }
+        return prev.map((dc) =>
+          dc.dateStr === dateStr ? { ...dc, label: trimmed } : dc
+        );
+      }
+      if (!trimmed) return prev;
+      return [...prev, { id: crypto.randomUUID(), dateStr, color: null, label: trimmed, createdBy: user.id }];
+    });
+
+    const success = await setDateLabel(dateStr, label, user.id);
+    if (!success) {
+      await loadDateColors();
+    }
   };
 
   const handleLogin = (newUser: User) => {
@@ -578,6 +639,7 @@ const App: React.FC = () => {
             onDateChange={handleDateChange}
             onDeleteMonthTodos={handleDeleteMonthTodos}
             todos={todos}
+            dateColors={dateColors}
           />
         </div>
 
@@ -592,6 +654,9 @@ const App: React.FC = () => {
               onUpdateTodoImages={handleUpdateTodoImages}
               currentUser={user}
               onClose={() => setShowTodoPanel(false)}
+              dateColors={dateColors}
+              onSetDateColor={handleSetDateColor}
+              onSetDateLabel={handleSetDateLabel}
             />
         </div>
 
@@ -624,6 +689,9 @@ const App: React.FC = () => {
               onUpdateTodoImages={handleUpdateTodoImages}
               currentUser={user}
               onClose={() => setShowTodoPanel(false)}
+              dateColors={dateColors}
+              onSetDateColor={handleSetDateColor}
+              onSetDateLabel={handleSetDateLabel}
             />
           </div>
         </div>

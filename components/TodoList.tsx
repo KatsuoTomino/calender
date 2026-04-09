@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
-import { TodoItem, User } from "../types";
+import { TodoItem, User, DateColor, DateColorType } from "../types";
 import { generateId } from "../services/storageService";
 import { uploadImageToR2, getImageUrl, deleteImageFromR2 } from "../services/r2Service";
 import Button from "./Button";
@@ -15,6 +15,9 @@ interface TodoListProps {
   onUpdateTodoImages: (id: string, imageUrls: string[] | null) => void;
   currentUser: User;
   onClose: () => void;
+  dateColors?: DateColor[];
+  onSetDateColor?: (dateStr: string, color: DateColorType) => void;
+  onSetDateLabel?: (dateStr: string, label: string | null) => void;
 }
 
 // 確認モーダルの型
@@ -32,6 +35,126 @@ interface ToastState {
   type: "success" | "error";
 }
 
+const DATE_COLOR_OPTIONS: { color: DateColorType; bgClass: string; activeBorder: string; label: string }[] = [
+  { color: "red", bgClass: "bg-red-200", activeBorder: "ring-red-400", label: "赤" },
+  { color: "yellow", bgClass: "bg-yellow-200", activeBorder: "ring-yellow-400", label: "黄" },
+  { color: "blue", bgClass: "bg-blue-200", activeBorder: "ring-blue-400", label: "青" },
+  { color: "green", bgClass: "bg-green-200", activeBorder: "ring-green-400", label: "緑" },
+  { color: "purple", bgClass: "bg-purple-200", activeBorder: "ring-purple-400", label: "紫" },
+];
+
+const DateColorPicker: React.FC<{
+  dateStr: string;
+  currentColor: DateColorType;
+  onSetColor: (dateStr: string, color: DateColorType) => void;
+}> = ({ dateStr, currentColor, onSetColor }) => {
+  return (
+    <div className="flex items-center gap-2 mt-2">
+      <span className="text-[10px] sm:text-xs text-slate-400 mr-1">背景色</span>
+      {DATE_COLOR_OPTIONS.map((opt) => (
+        <button
+          key={opt.color}
+          onClick={() => onSetColor(dateStr, currentColor === opt.color ? null : opt.color)}
+          className={`w-6 h-6 sm:w-7 sm:h-7 rounded-full ${opt.bgClass} transition-all ${
+            currentColor === opt.color
+              ? `ring-2 ${opt.activeBorder} scale-110`
+              : "hover:scale-110 opacity-70 hover:opacity-100"
+          }`}
+          title={opt.label}
+          aria-label={`背景色: ${opt.label}`}
+        />
+      ))}
+      {currentColor && (
+        <button
+          onClick={() => onSetColor(dateStr, null)}
+          className="w-6 h-6 sm:w-7 sm:h-7 rounded-full border-2 border-dashed border-slate-300 flex items-center justify-center text-slate-400 hover:text-slate-600 hover:border-slate-400 transition-all"
+          title="色を解除"
+          aria-label="背景色を解除"
+        >
+          <svg className="w-3 h-3 sm:w-3.5 sm:h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      )}
+    </div>
+  );
+};
+
+const DateLabelInput: React.FC<{
+  dateStr: string;
+  currentLabel: string;
+  onSetLabel: (dateStr: string, label: string | null) => void;
+}> = ({ dateStr, currentLabel, onSetLabel }) => {
+  const [value, setValue] = useState(currentLabel);
+  const [isEditing, setIsEditing] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    setValue(currentLabel);
+  }, [currentLabel, dateStr]);
+
+  useEffect(() => {
+    if (isEditing && inputRef.current) {
+      inputRef.current.focus();
+    }
+  }, [isEditing]);
+
+  const handleSubmit = () => {
+    const trimmed = value.trim();
+    onSetLabel(dateStr, trimmed || null);
+    setIsEditing(false);
+  };
+
+  if (!isEditing && !currentLabel) {
+    return (
+      <button
+        onClick={() => setIsEditing(true)}
+        className="flex items-center gap-1 text-[10px] sm:text-xs text-slate-400 hover:text-slate-600 transition-colors"
+        title="ラベルを追加"
+      >
+        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+        </svg>
+        ラベル
+      </button>
+    );
+  }
+
+  if (isEditing) {
+    return (
+      <div className="flex items-center gap-1">
+        <input
+          ref={inputRef}
+          type="text"
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          onBlur={handleSubmit}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") handleSubmit();
+            if (e.key === "Escape") { setValue(currentLabel); setIsEditing(false); }
+          }}
+          placeholder="ラベルを入力"
+          maxLength={10}
+          className="w-24 sm:w-28 px-2 py-0.5 text-[10px] sm:text-xs border border-slate-300 rounded-md focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
+        />
+      </div>
+    );
+  }
+
+  return (
+    <button
+      onClick={() => setIsEditing(true)}
+      className="flex items-center gap-1 text-[10px] sm:text-xs text-slate-600 bg-slate-100 px-2 py-0.5 rounded-md hover:bg-slate-200 transition-colors max-w-[100px] sm:max-w-[120px]"
+      title="ラベルを編集"
+    >
+      <span className="truncate">{currentLabel}</span>
+      <svg className="w-3 h-3 shrink-0 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+      </svg>
+    </button>
+  );
+};
+
 const TodoList: React.FC<TodoListProps> = ({
   date,
   dateStr,
@@ -43,6 +166,9 @@ const TodoList: React.FC<TodoListProps> = ({
   onUpdateTodoImages,
   currentUser,
   onClose,
+  dateColors = [],
+  onSetDateColor,
+  onSetDateLabel,
 }) => {
   const [newTodoText, setNewTodoText] = useState("");
   const [isUploading, setIsUploading] = useState(false);
@@ -391,15 +517,16 @@ const TodoList: React.FC<TodoListProps> = ({
   return (
     <div className="h-full flex flex-col bg-white md:rounded-3xl shadow-sm overflow-hidden">
       {/* Header */}
-      <div className="p-4 sm:p-6 border-b border-slate-50 flex justify-between items-center bg-gradient-to-r from-white to-pink-50/30 shrink-0">
-        <div>
-          <h3 className="text-base sm:text-lg font-bold text-slate-800">
-            {title || (date ? `${date.getMonth() + 1}月${date.getDate()}日の予定` : 'タスク')}
-          </h3>
-          <p className="text-xs text-slate-400">
-            {todos.filter((t) => !t.completed).length} tasks remaining
-          </p>
-        </div>
+      <div className="p-4 sm:p-6 border-b border-slate-50 bg-gradient-to-r from-white to-pink-50/30 shrink-0">
+        <div className="flex justify-between items-center">
+          <div>
+            <h3 className="text-base sm:text-lg font-bold text-slate-800">
+              {title || (date ? `${date.getMonth() + 1}月${date.getDate()}日の予定` : 'タスク')}
+            </h3>
+            <p className="text-xs text-slate-400">
+              {todos.filter((t) => !t.completed).length} tasks remaining
+            </p>
+          </div>
         {/* モーダル表示の場合（important, shopping, monthly）は常に×ボタンを表示 */}
         {(dateStr === 'important' || dateStr === 'shopping' || dateStr === 'monthly') && (
           <button
@@ -443,6 +570,26 @@ const TodoList: React.FC<TodoListProps> = ({
               />
             </svg>
           </button>
+        )}
+        </div>
+        {/* カラーピッカーとラベル入力（日付ベースのタスクのみ） */}
+        {!dateStr && date && (onSetDateColor || onSetDateLabel) && (
+          <div className="flex items-center gap-3 mt-2 flex-wrap">
+            {onSetDateColor && (
+              <DateColorPicker
+                dateStr={formatLocalDate(date)}
+                currentColor={dateColors.find((dc) => dc.dateStr === formatLocalDate(date))?.color || null}
+                onSetColor={onSetDateColor}
+              />
+            )}
+            {onSetDateLabel && (
+              <DateLabelInput
+                dateStr={formatLocalDate(date)}
+                currentLabel={dateColors.find((dc) => dc.dateStr === formatLocalDate(date))?.label || ""}
+                onSetLabel={onSetDateLabel}
+              />
+            )}
+          </div>
         )}
       </div>
 

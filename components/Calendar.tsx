@@ -1,6 +1,6 @@
 import React, { useMemo, useState, useRef, useEffect } from "react";
 import { WEEKDAYS } from "../constants";
-import { DayData, TodoItem } from "../types";
+import { DayData, TodoItem, DateColor } from "../types";
 import { getHolidayName, isWeekend } from "../utils/holidays";
 
 interface CalendarProps {
@@ -11,6 +11,7 @@ interface CalendarProps {
   onDateChange?: (year: number, month: number) => void;
   onDeleteMonthTodos: () => void;
   todos: TodoItem[];
+  dateColors?: DateColor[];
 }
 
 const Calendar: React.FC<CalendarProps> = ({
@@ -21,6 +22,7 @@ const Calendar: React.FC<CalendarProps> = ({
   onDateChange,
   onDeleteMonthTodos,
   todos,
+  dateColors = [],
 }) => {
   const [showYearMonthPicker, setShowYearMonthPicker] = useState(false);
   const [tempSelectedYear, setTempSelectedYear] = useState<number | null>(null);
@@ -409,6 +411,39 @@ const Calendar: React.FC<CalendarProps> = ({
       <div className="grid grid-cols-7 grid-rows-6 bg-slate-200 border border-slate-200 gap-px flex-1 overflow-hidden rounded-lg">
         {calendarDays.map((day, idx) => {
           const isDaySelected = isSelected(day.date);
+          const dateColor = dateColors.find((dc) => dc.dateStr === day.dateStr);
+
+          const colorBgClass = dateColor
+            ? dateColor.color === "red"
+              ? "bg-red-100"
+              : dateColor.color === "yellow"
+              ? "bg-yellow-100"
+              : dateColor.color === "blue"
+              ? "bg-blue-100"
+              : dateColor.color === "green"
+              ? "bg-green-100"
+              : dateColor.color === "purple"
+              ? "bg-purple-100"
+              : ""
+            : "";
+
+          const baseBgClass = colorBgClass
+            ? colorBgClass
+            : !day.isCurrentMonth
+            ? "bg-slate-50"
+            : day.isHoliday
+            ? "bg-red-50"
+            : day.isWeekend
+            ? "bg-blue-50"
+            : "bg-white";
+
+          const textClass = !day.isCurrentMonth
+            ? "text-slate-400"
+            : day.isHoliday
+            ? "text-red-700"
+            : day.isWeekend
+            ? "text-blue-700"
+            : "text-slate-700";
 
           return (
             <button
@@ -416,16 +451,8 @@ const Calendar: React.FC<CalendarProps> = ({
               onClick={() => onSelectDate(day.date)}
               className={`
                 relative flex flex-col items-start justify-start p-0.5 md:p-1 text-left transition-colors
-                ${
-                  !day.isCurrentMonth
-                    ? "bg-slate-50 text-slate-400"
-                    : day.isHoliday
-                    ? "bg-red-50 text-red-700"
-                    : day.isWeekend
-                    ? "bg-blue-50 text-blue-700"
-                    : "bg-white text-slate-700"
-                }
-                ${isDaySelected ? "bg-pink-50 ring-2 ring-pink-300" : "hover:bg-slate-50"}
+                ${baseBgClass} ${textClass}
+                ${isDaySelected ? "ring-2 ring-pink-300" : "hover:bg-slate-50"}
               `}
               title={day.holidayName || undefined}
             >
@@ -448,6 +475,11 @@ const Calendar: React.FC<CalendarProps> = ({
                 {day.holidayName && (
                   <span className="text-[8px] md:text-[9px] font-medium text-red-600 truncate max-w-[60px] md:max-w-[80px]">
                     {day.holidayName}
+                  </span>
+                )}
+                {!day.holidayName && dateColor?.label && (
+                  <span className="text-[8px] md:text-[9px] font-medium text-slate-500 truncate max-w-[60px] md:max-w-[80px]">
+                    {dateColor.label}
                   </span>
                 )}
               </div>

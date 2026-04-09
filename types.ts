@@ -28,6 +28,16 @@ export interface DayData {
   isWeekend?: boolean;
 }
 
+export type DateColorType = 'red' | 'yellow' | 'blue' | 'green' | 'purple' | null;
+
+export interface DateColor {
+  id: string;
+  dateStr: string;
+  color: DateColorType;
+  label?: string | null;
+  createdBy: string;
+}
+
 export enum GeminiAction {
   SUGGEST_TASKS = 'SUGGEST_TASKS',
   ENCOURAGE = 'ENCOURAGE'

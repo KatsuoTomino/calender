@@ -1,6 +1,61 @@
 import { supabase } from "./supabaseClient";
 import { DateColor, DateColorType } from "../types";
 
+async function updateOrInsertDateColor(
+  dateStr: string,
+  values: { color?: DateColorType; label?: string | null },
+  createdBy: string
+): Promise<boolean> {
+  const updatedAt = new Date().toISOString();
+  const updateValues = { ...values, updated_at: updatedAt };
+
+  // Supabaseはフィルタ後に`.select()`をつなぐと更新行を返す。
+  // 参照: https://supabase.com/docs/reference/javascript/update
+  const { data, error } = await supabase
+    .from("date_colors")
+    .update(updateValues)
+    .eq("date_str", dateStr)
+    .select("id");
+
+  if (error) {
+    console.error("DateColor更新エラー:", error);
+    return false;
+  }
+
+  if ((data || []).length > 0) {
+    return true;
+  }
+
+  const { error: insertError } = await supabase.from("date_colors").insert({
+    date_str: dateStr,
+    color: null,
+    label: null,
+    created_by: createdBy,
+    updated_at: updatedAt,
+    ...values,
+  });
+
+  if (!insertError) {
+    return true;
+  }
+
+  if (insertError.code === "23505") {
+    const { error: retryError } = await supabase
+      .from("date_colors")
+      .update(updateValues)
+      .eq("date_str", dateStr);
+
+    if (retryError) {
+      console.error("DateColor競合後の更新エラー:", retryError);
+      return false;
+    }
+    return true;
+  }
+
+  console.error("DateColor追加エラー:", insertError);
+  return false;
+}
+
 export async function fetchDateColors(): Promise<DateColor[]> {
   try {
     const { data, error } = await supabase
@@ -32,55 +87,32 @@ export async function setDateColor(
 ): Promise<boolean> {
   try {
     if (color === null) {
-      // 色を解除するとき、ラベルが残っていればレコードを残す
-      const { data } = await supabase
+      // 古い読み取り結果で同時追加されたラベルを消さないよう、削除は条件付きにする。
+      const { error: updateError } = await supabase
         .from("date_colors")
-        .select("label")
-        .eq("date_str", dateStr)
-        .single();
-
-      if (data?.label) {
-        const { error } = await supabase
-          .from("date_colors")
-          .update({ color: null, updated_at: new Date().toISOString() })
-          .eq("date_str", dateStr);
-        if (error) {
-          console.error("DateColor更新エラー:", error);
-          return false;
-        }
-        return true;
-      }
-
-      const { error } = await supabase
-        .from("date_colors")
-        .delete()
+        .update({ color: null, updated_at: new Date().toISOString() })
         .eq("date_str", dateStr);
 
-      if (error) {
-        console.error("DateColor削除エラー:", error);
+      if (updateError) {
+        console.error("DateColor更新エラー:", updateError);
+        return false;
+      }
+
+      const { error: deleteError } = await supabase
+        .from("date_colors")
+        .delete()
+        .eq("date_str", dateStr)
+        .is("color", null)
+        .is("label", null);
+
+      if (deleteError) {
+        console.error("DateColor削除エラー:", deleteError);
         return false;
       }
       return true;
     }
 
-    const { error } = await supabase
-      .from("date_colors")
-      .upsert(
-        {
-          date_str: dateStr,
-          color,
-          created_by: createdBy,
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: "date_str" }
-      );
-
-    if (error) {
-      console.error("DateColor更新エラー:", error);
-      return false;
-    }
-
-    return true;
+    return updateOrInsertDateColor(dateStr, { color }, createdBy);
   } catch (err) {
     console.error("予期しないエラー:", err);
     return false;
@@ -94,54 +126,32 @@ export async function setDateLabel(
 ): Promise<boolean> {
   try {
     if (!label || label.trim() === "") {
-      // ラベルを消すとき、色も無ければレコード削除
-      const { data } = await supabase
+      // 古い読み取り結果で同時追加された背景色を消さないよう、削除は条件付きにする。
+      const { error: updateError } = await supabase
         .from("date_colors")
-        .select("color")
-        .eq("date_str", dateStr)
-        .single();
+        .update({ label: null, updated_at: new Date().toISOString() })
+        .eq("date_str", dateStr);
 
-      if (data?.color) {
-        const { error } = await supabase
-          .from("date_colors")
-          .update({ label: null, updated_at: new Date().toISOString() })
-          .eq("date_str", dateStr);
-        if (error) {
-          console.error("DateLabel更新エラー:", error);
-          return false;
-        }
-        return true;
+      if (updateError) {
+        console.error("DateLabel更新エラー:", updateError);
+        return false;
       }
 
-      const { error } = await supabase
+      const { error: deleteError } = await supabase
         .from("date_colors")
         .delete()
-        .eq("date_str", dateStr);
-      if (error) {
-        console.error("DateLabel削除エラー:", error);
+        .eq("date_str", dateStr)
+        .is("color", null)
+        .is("label", null);
+
+      if (deleteError) {
+        console.error("DateLabel削除エラー:", deleteError);
         return false;
       }
       return true;
     }
 
-    const { error } = await supabase
-      .from("date_colors")
-      .upsert(
-        {
-          date_str: dateStr,
-          label: label.trim(),
-          created_by: createdBy,
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: "date_str" }
-      );
-
-    if (error) {
-      console.error("DateLabel更新エラー:", error);
-      return false;
-    }
-
-    return true;
+    return updateOrInsertDateColor(dateStr, { label: label.trim() }, createdBy);
   } catch (err) {
     console.error("予期しないエラー:", err);
     return false;

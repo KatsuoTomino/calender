@@ -63,17 +63,30 @@ export async function setDateColor(
       return true;
     }
 
-    const { error } = await supabase
+    const { data: existing, error: fetchError } = await supabase
       .from("date_colors")
-      .upsert(
-        {
+      .select("id")
+      .eq("date_str", dateStr)
+      .maybeSingle();
+
+    if (fetchError) {
+      console.error("DateColor取得エラー:", fetchError);
+      return false;
+    }
+
+    const now = new Date().toISOString();
+    const { error } = existing
+      ? await supabase
+          .from("date_colors")
+          .update({ color, updated_at: now })
+          .eq("date_str", dateStr)
+      : await supabase.from("date_colors").insert({
           date_str: dateStr,
           color,
+          label: null,
           created_by: createdBy,
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: "date_str" }
-      );
+          updated_at: now,
+        });
 
     if (error) {
       console.error("DateColor更新エラー:", error);
@@ -124,17 +137,31 @@ export async function setDateLabel(
       return true;
     }
 
-    const { error } = await supabase
+    const trimmedLabel = label.trim();
+    const { data: existing, error: fetchError } = await supabase
       .from("date_colors")
-      .upsert(
-        {
+      .select("id")
+      .eq("date_str", dateStr)
+      .maybeSingle();
+
+    if (fetchError) {
+      console.error("DateLabel取得エラー:", fetchError);
+      return false;
+    }
+
+    const now = new Date().toISOString();
+    const { error } = existing
+      ? await supabase
+          .from("date_colors")
+          .update({ label: trimmedLabel, updated_at: now })
+          .eq("date_str", dateStr)
+      : await supabase.from("date_colors").insert({
           date_str: dateStr,
-          label: label.trim(),
+          color: null,
+          label: trimmedLabel,
           created_by: createdBy,
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: "date_str" }
-      );
+          updated_at: now,
+        });
 
     if (error) {
       console.error("DateLabel更新エラー:", error);

@@ -188,26 +188,6 @@ const App: React.FC = () => {
     }
 
     try {
-      console.log("🔄 古いアバター画像を削除中...");
-      // 古いアバター画像を削除（複数の拡張子を試す）
-      const extensions = ['jpg', 'jpeg', 'png', 'webp', 'gif'];
-      for (const ext of extensions) {
-        const oldAvatarKey = `users/${user.id}/avatar.${ext}`;
-        try {
-          await deleteImageFromR2(oldAvatarKey);
-        } catch (error) {
-          // 404エラーは無視（存在しないファイル）
-        }
-      }
-      // 後方互換性: localStorageに保存されているキーも削除を試みる
-      if (user.avatarImageUrl) {
-        try {
-          await deleteImageFromR2(user.avatarImageUrl);
-        } catch (error) {
-          // エラーは無視
-        }
-      }
-
       console.log("📤 R2にアップロード中...");
       // R2にアップロード
       const uploadedKey = await uploadAvatarToR2(file, user.id);
@@ -218,6 +198,27 @@ const App: React.FC = () => {
       }
 
       console.log("✅ アップロード成功:", uploadedKey);
+
+      console.log("🔄 古いアバター画像を削除中...");
+      // 新しい画像のアップロード成功後に旧キーを掃除する。失敗時に既存アバターを失わないため。
+      const extensions = ['jpg', 'jpeg', 'png', 'webp', 'gif'];
+      for (const ext of extensions) {
+        const oldAvatarKey = `users/${user.id}/avatar.${ext}`;
+        if (oldAvatarKey === uploadedKey) continue;
+        try {
+          await deleteImageFromR2(oldAvatarKey);
+        } catch (error) {
+          // 404エラーは無視（存在しないファイル）
+        }
+      }
+      // 後方互換性: localStorageに保存されているキーも削除を試みる
+      if (user.avatarImageUrl && user.avatarImageUrl !== uploadedKey) {
+        try {
+          await deleteImageFromR2(user.avatarImageUrl);
+        } catch (error) {
+          // エラーは無視
+        }
+      }
 
       // ユーザー情報を更新（後方互換性のためlocalStorageにも保存）
       const updatedUser: User = {
@@ -401,7 +402,7 @@ const App: React.FC = () => {
     }
   };
 
-  const handleDeleteTodo = async (id: string) => {
+  const handleDeleteTodo = async (id: string): Promise<boolean> => {
     // 楽観的更新
     const deletedTodo = todos.find((t) => t.id === id);
     setTodos((prev) => prev.filter((t) => t.id !== id));
@@ -413,9 +414,13 @@ const App: React.FC = () => {
       setTodos((prev) => [...prev, deletedTodo]);
       alert("Todoの削除に失敗しました");
     }
+    return success;
   };
 
-  const handleUpdateTodoImages = async (id: string, imageUrls: string[] | null) => {
+  const handleUpdateTodoImages = async (
+    id: string,
+    imageUrls: string[] | null
+  ): Promise<boolean> => {
     // 楽観的更新
     const originalTodo = todos.find((t) => t.id === id);
     setTodos((prev) =>
@@ -431,6 +436,7 @@ const App: React.FC = () => {
       );
       alert("画像の更新に失敗しました");
     }
+    return success;
   };
 
   const handleDeleteMonthTodos = async () => {
@@ -473,27 +479,6 @@ const App: React.FC = () => {
       prev.filter((t) => !monthTodos.find((mt) => mt.id === t.id))
     );
 
-    // R2から画像を削除
-    if (totalImages > 0) {
-      console.log(`🗑️ 月の削除に伴い、${totalImages}枚の画像をR2から削除中...`);
-      for (const todo of todosWithImages) {
-        if (todo.imageUrls && todo.imageUrls.length > 0) {
-          for (const imageKey of todo.imageUrls) {
-            try {
-              const deleted = await deleteImageFromR2(imageKey);
-              if (deleted) {
-                console.log("✅ R2からの画像削除成功:", imageKey);
-              } else {
-                console.warn("⚠️ R2からの画像削除に失敗:", imageKey);
-              }
-            } catch (error) {
-              console.error("❌ R2からの画像削除エラー:", error);
-            }
-          }
-        }
-      }
-    }
-
     // Supabaseで一括削除
     const success = await deleteMonthTodos(year, month);
     if (!success) {
@@ -501,6 +486,26 @@ const App: React.FC = () => {
       setTodos((prev) => [...prev, ...monthTodos]);
       alert("月のTodo削除に失敗しました");
     } else {
+      // DB削除の成功後にR2を削除する。DB失敗時に参照中の画像を失わないため。
+      if (totalImages > 0) {
+        console.log(`🗑️ 月の削除に伴い、${totalImages}枚の画像をR2から削除中...`);
+        for (const todo of todosWithImages) {
+          if (todo.imageUrls && todo.imageUrls.length > 0) {
+            for (const imageKey of todo.imageUrls) {
+              try {
+                const deleted = await deleteImageFromR2(imageKey);
+                if (deleted) {
+                  console.log("✅ R2からの画像削除成功:", imageKey);
+                } else {
+                  console.warn("⚠️ R2からの画像削除に失敗:", imageKey);
+                }
+              } catch (error) {
+                console.error("❌ R2からの画像削除エラー:", error);
+              }
+            }
+          }
+        }
+      }
       console.log("✅ 月のTodo削除完了");
     }
   };

@@ -1,31 +1,86 @@
-import { S3Client, PutObjectCommand, DeleteObjectCommand, GetObjectCommand, ListObjectsV2Command, HeadObjectCommand } from "@aws-sdk/client-s3";
-import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import { supabase } from "./supabaseClient";
 
-// 環境変数から設定を取得
-const accountId = import.meta.env.VITE_R2_ACCOUNT_ID;
-const accessKeyId = import.meta.env.VITE_R2_ACCESS_KEY_ID;
-const secretAccessKey = import.meta.env.VITE_R2_SECRET_ACCESS_KEY;
-const bucketName = import.meta.env.VITE_R2_BUCKET_NAME;
-const endpoint = import.meta.env.VITE_R2_ENDPOINT;
+// ViteはVITE_*環境変数をクライアントバンドルへ埋め込むため、
+// R2のSecret Access Keyをブラウザで扱わない。
+// Docs: https://vite.dev/guide/env-and-mode#env-variables
+// R2の書き込み/削除はサーバー側で生成した署名付きURL経由にする必要がある。
+// Docs: https://developers.cloudflare.com/r2/api/s3/presigned-urls/
+const publicBaseUrl =
+  import.meta.env.VITE_R2_PUBLIC_BASE_URL || import.meta.env.VITE_R2_ENDPOINT || "";
 
-// 環境変数のバリデーション
-if (!accountId || !accessKeyId || !secretAccessKey || !bucketName || !endpoint) {
-  console.warn(
-    "R2環境変数が設定されていません。画像アップロード機能は使用できません。"
-  );
+type R2Operation = "get" | "put" | "delete" | "head";
+
+interface PresignResponse {
+  url: string;
+  key: string;
+  expiresIn: number;
 }
 
-// S3クライアントの初期化
-const s3Client = accountId && accessKeyId && secretAccessKey && bucketName && endpoint
-  ? new S3Client({
-      region: "auto",
-      endpoint: endpoint,
-      credentials: {
-        accessKeyId: accessKeyId,
-        secretAccessKey: secretAccessKey,
+function isHttpUrl(value: string): boolean {
+  return value.startsWith("http://") || value.startsWith("https://");
+}
+
+function buildPublicUrl(imageKey: string): string | null {
+  if (!publicBaseUrl) return null;
+
+  const baseUrl = publicBaseUrl.replace(/\/+$/, "");
+  const normalizedKey = imageKey.replace(/^\/+/, "");
+  const encodedKey = normalizedKey.split("/").map(encodeURIComponent).join("/");
+  return `${baseUrl}/${encodedKey}`;
+}
+
+function getFileExtension(file: File): string {
+  const extension = file.name.split(".").pop()?.toLowerCase() || "jpg";
+  return extension.replace(/[^a-z0-9]/g, "") || "jpg";
+}
+
+function extractObjectKey(imageKeyOrUrl: string): string {
+  if (!isHttpUrl(imageKeyOrUrl)) return imageKeyOrUrl;
+
+  try {
+    const url = new URL(imageKeyOrUrl);
+    return decodeURIComponent(url.pathname.replace(/^\/+/, ""));
+  } catch {
+    return imageKeyOrUrl;
+  }
+}
+
+async function requestPresignedUrl(
+  operation: R2Operation,
+  key: string,
+  contentType?: string
+): Promise<PresignResponse | null> {
+  try {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+
+    if (!session?.access_token) {
+      console.error("R2署名付きURLの取得にはログインが必要です。");
+      return null;
+    }
+
+    const response = await fetch("/api/r2/presign", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${session.access_token}`,
       },
-    })
-  : null;
+      body: JSON.stringify({ operation, key, contentType }),
+    });
+
+    if (!response.ok) {
+      const message = await response.text();
+      console.error("R2署名付きURLの取得に失敗しました:", message);
+      return null;
+    }
+
+    return (await response.json()) as PresignResponse;
+  } catch (error) {
+    console.error("R2署名付きURLの取得エラー:", error);
+    return null;
+  }
+}
 
 /**
  * ユーザーアバター画像をR2にアップロード
@@ -37,44 +92,26 @@ export async function uploadAvatarToR2(
   file: File,
   userId: string
 ): Promise<string | null> {
-  if (!s3Client || !bucketName) {
-    console.error("R2設定が不完全です。環境変数を確認してください。");
-    return null;
-  }
-
   try {
-    console.log("📤 アバター画像アップロード開始:", file.name);
+    const contentType = file.type || "image/jpeg";
+    const fileName = `users/${userId}/avatar.${getFileExtension(file)}`;
+    const presigned = await requestPresignedUrl("put", fileName, contentType);
+    if (!presigned) return null;
 
-    // ファイル名を生成（users/{userId}/avatar.{拡張子}）
-    const fileExtension = file.name.split(".").pop() || "jpg";
-    const fileName = `users/${userId}/avatar.${fileExtension}`;
-
-    console.log("📁 ファイル名:", fileName);
-
-    // ファイルをArrayBufferに変換（ブラウザ環境対応）
-    const arrayBuffer = await file.arrayBuffer();
-    const uint8Array = new Uint8Array(arrayBuffer);
-
-    console.log("📦 ファイルサイズ:", uint8Array.length, "bytes");
-
-    // R2にアップロード
-    const command = new PutObjectCommand({
-      Bucket: bucketName,
-      Key: fileName,
-      Body: uint8Array,
-      ContentType: file.type || "image/jpeg",
+    const response = await fetch(presigned.url, {
+      method: "PUT",
+      headers: { "Content-Type": contentType },
+      body: file,
     });
 
-    await s3Client.send(command);
-    console.log("✅ R2へのアバター画像アップロード成功");
+    if (!response.ok) {
+      console.error("❌ R2へのアバター画像アップロードエラー:", response.statusText);
+      return null;
+    }
 
     return fileName;
-  } catch (error: any) {
+  } catch (error) {
     console.error("❌ R2へのアバター画像アップロードエラー:", error);
-    console.error("エラー詳細:", error.message);
-    if (error.$metadata) {
-      console.error("リクエストID:", error.$metadata.requestId);
-    }
     return null;
   }
 }
@@ -89,107 +126,45 @@ export async function uploadImageToR2(
   file: File,
   todoId: string
 ): Promise<string | null> {
-  if (!s3Client || !bucketName) {
-    console.error("R2設定が不完全です。環境変数を確認してください。");
-    return null;
-  }
-
   try {
-    console.log("📤 画像アップロード開始:", file.name);
-
-    // ファイル名を生成（todoId + タイムスタンプ + 拡張子）
+    const contentType = file.type || "image/jpeg";
     const timestamp = Date.now();
-    const fileExtension = file.name.split(".").pop() || "jpg";
-    const fileName = `todos/${todoId}/${timestamp}.${fileExtension}`;
+    const fileName = `todos/${todoId}/${timestamp}.${getFileExtension(file)}`;
+    const presigned = await requestPresignedUrl("put", fileName, contentType);
+    if (!presigned) return null;
 
-    console.log("📁 ファイル名:", fileName);
-
-    // ファイルをArrayBufferに変換（ブラウザ環境対応）
-    const arrayBuffer = await file.arrayBuffer();
-    const uint8Array = new Uint8Array(arrayBuffer);
-
-    console.log("📦 ファイルサイズ:", uint8Array.length, "bytes");
-
-    // R2にアップロード
-    const command = new PutObjectCommand({
-      Bucket: bucketName,
-      Key: fileName,
-      Body: uint8Array,
-      ContentType: file.type || "image/jpeg",
+    const response = await fetch(presigned.url, {
+      method: "PUT",
+      headers: { "Content-Type": contentType },
+      body: file,
     });
 
-    await s3Client.send(command);
-    console.log("✅ R2へのアップロード成功");
-
-    // R2キーパスを返す（表示時にPresigned URLを生成）
-    // 形式: r2://bucket-name/path/to/file または単にパス
-    const imageKey = fileName;
-    
-    return imageKey;
-  } catch (error: any) {
-    console.error("❌ R2への画像アップロードエラー:", error);
-    console.error("エラー詳細:", error.message);
-    if (error.$metadata) {
-      console.error("リクエストID:", error.$metadata.requestId);
+    if (!response.ok) {
+      console.error("❌ R2への画像アップロードエラー:", response.statusText);
+      return null;
     }
+
+    return fileName;
+  } catch (error) {
+    console.error("❌ R2への画像アップロードエラー:", error);
     return null;
   }
 }
 
 /**
  * R2キーから画像の表示用URLを取得
- * パブリックアクセスが無効な場合はPresigned URLを生成
+ * 公開URLが無い場合は認証済みサーバーAPIでPresigned URLを生成
  * @param imageKeyOrUrl R2のキー（例: todos/123/1234567890.jpg）またはURL
  * @returns 画像の表示用URL、失敗時はnull
  */
 export async function getImageUrl(imageKeyOrUrl: string): Promise<string | null> {
-  if (!s3Client || !bucketName) {
-    console.error("R2設定が不完全です。");
-    return null;
-  }
+  if (isHttpUrl(imageKeyOrUrl)) return imageKeyOrUrl;
 
-  try {
-    // URLの場合はキーを抽出、そうでなければそのまま使用
-    let imageKey: string;
-    if (imageKeyOrUrl.startsWith("http://") || imageKeyOrUrl.startsWith("https://")) {
-      try {
-        const url = new URL(imageKeyOrUrl);
-        imageKey = url.pathname.substring(1); // 先頭の/を削除
-        // バケット名が含まれている場合は除去
-        if (imageKey.startsWith(`${bucketName}/`)) {
-          imageKey = imageKey.substring(bucketName.length + 1);
-        }
-      } catch {
-        // URLのパースに失敗した場合はそのまま使用
-        imageKey = imageKeyOrUrl;
-      }
-    } else {
-      imageKey = imageKeyOrUrl;
-    }
+  const publicUrl = buildPublicUrl(imageKeyOrUrl);
+  if (publicUrl) return publicUrl;
 
-    // パブリックURLを試す
-    const publicUrl = `${endpoint}/${imageKey}`;
-    
-    // パブリックアクセスが無効な場合に備えて、Presigned URLを生成
-    const command = new GetObjectCommand({
-      Bucket: bucketName,
-      Key: imageKey,
-    });
-
-    try {
-      const presignedUrl = await getSignedUrl(s3Client, command, {
-        expiresIn: 3600 * 24 * 7, // 7日間有効
-      });
-      console.log("✅ Presigned URL生成成功:", imageKey);
-      return presignedUrl;
-    } catch (error) {
-      console.warn("⚠️ Presigned URL生成に失敗、パブリックURLを使用:", publicUrl);
-      return publicUrl;
-    }
-  } catch (error) {
-    console.error("❌ 画像URL取得エラー:", error);
-    return null;
-  }
+  const presigned = await requestPresignedUrl("get", imageKeyOrUrl);
+  return presigned?.url ?? null;
 }
 
 /**
@@ -198,28 +173,17 @@ export async function getImageUrl(imageKeyOrUrl: string): Promise<string | null>
  * @returns 削除成功時true、失敗時false
  */
 export async function deleteImageFromR2(imageKey: string): Promise<boolean> {
-  if (!s3Client || !bucketName) {
-    console.error("R2設定が不完全です。");
-    return false;
-  }
-
   try {
-    // URLの場合はキーを抽出、そうでなければそのまま使用
-    let key: string;
-    if (imageKey.startsWith("http://") || imageKey.startsWith("https://")) {
-      const url = new URL(imageKey);
-      key = url.pathname.substring(1); // 先頭の/を削除
-    } else {
-      key = imageKey;
+    const key = extractObjectKey(imageKey);
+    const presigned = await requestPresignedUrl("delete", key);
+    if (!presigned) return false;
+
+    const response = await fetch(presigned.url, { method: "DELETE" });
+    if (!response.ok) {
+      console.error("❌ R2からの画像削除エラー:", response.statusText);
+      return false;
     }
 
-    const command = new DeleteObjectCommand({
-      Bucket: bucketName,
-      Key: key,
-    });
-
-    await s3Client.send(command);
-    console.log("✅ R2からの画像削除成功:", key);
     return true;
   } catch (error) {
     console.error("❌ R2からの画像削除エラー:", error);
@@ -233,66 +197,24 @@ export async function deleteImageFromR2(imageKey: string): Promise<boolean> {
  * @returns アバター画像の表示用URL、存在しない場合はnull
  */
 export async function getAvatarFromR2(userId: string): Promise<string | null> {
-  if (!s3Client || !bucketName) {
-    console.error("❌ R2設定が不完全です。s3Client:", !!s3Client, "bucketName:", bucketName);
-    return null;
-  }
-
   if (!userId) {
     console.error("❌ userIdが指定されていません");
     return null;
   }
 
-  console.log(`🔍 R2からアバター画像を検索中... userId: ${userId}`);
+  const extensions = ["jpg", "jpeg", "png", "webp", "gif"];
+  for (const ext of extensions) {
+    const avatarKey = `users/${userId}/avatar.${ext}`;
+    const presigned = await requestPresignedUrl("head", avatarKey);
+    if (!presigned) continue;
 
-  try {
-    // 一般的な画像拡張子を試す
-    const extensions = ['jpg', 'jpeg', 'png', 'webp', 'gif'];
-    
-    for (const ext of extensions) {
-      const avatarKey = `users/${userId}/avatar.${ext}`;
-      console.log(`  📁 確認中: ${avatarKey}`);
-      
-      try {
-        // オブジェクトの存在確認
-        const headCommand = new HeadObjectCommand({
-          Bucket: bucketName,
-          Key: avatarKey,
-        });
-        
-        await s3Client.send(headCommand);
-        console.log(`  ✅ ファイルが見つかりました: ${avatarKey}`);
-        
-        // 存在する場合はPresigned URLを生成
-        const getCommand = new GetObjectCommand({
-          Bucket: bucketName,
-          Key: avatarKey,
-        });
-        
-        const presignedUrl = await getSignedUrl(s3Client, getCommand, {
-          expiresIn: 3600 * 24 * 7, // 7日間有効
-        });
-        
-        console.log(`✅ アバター画像をR2から取得成功: ${avatarKey}`);
-        return presignedUrl;
-      } catch (error: any) {
-        // 404エラー（オブジェクトが存在しない）の場合は次の拡張子を試す
-        if (error.name === 'NotFound' || error.$metadata?.httpStatusCode === 404) {
-          console.log(`  ℹ️ ファイルが存在しません: ${avatarKey}`);
-          continue;
-        }
-        // その他のエラーはログに記録
-        console.warn(`⚠️ アバター画像の確認中にエラー (${avatarKey}):`, error.message, error);
-      }
+    const response = await fetch(presigned.url, { method: "HEAD" });
+    if (response.ok) {
+      return getImageUrl(avatarKey);
     }
-    
-    console.log(`ℹ️ アバター画像が見つかりませんでした (userId: ${userId})`);
-    return null;
-  } catch (error: any) {
-    console.error("❌ アバター画像取得エラー:", error);
-    console.error("エラー詳細:", error.message, error);
-    return null;
   }
+
+  return null;
 }
 
 /**
@@ -305,27 +227,8 @@ export async function getPresignedUrl(
   imageUrl: string,
   expiresIn: number = 3600
 ): Promise<string | null> {
-  if (!s3Client || !bucketName) {
-    console.error("R2設定が不完全です。");
-    return null;
-  }
-
-  try {
-    const url = new URL(imageUrl);
-    const key = url.pathname.substring(1);
-
-    const command = new GetObjectCommand({
-      Bucket: bucketName,
-      Key: key,
-    });
-
-    const presignedUrl = await getSignedUrl(s3Client, command, {
-      expiresIn,
-    });
-
-    return presignedUrl;
-  } catch (error) {
-    console.error("Presigned URL生成エラー:", error);
-    return null;
-  }
+  void expiresIn;
+  const key = extractObjectKey(imageUrl);
+  const presigned = await requestPresignedUrl("get", key);
+  return presigned?.url ?? null;
 }

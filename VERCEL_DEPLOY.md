@@ -53,6 +53,13 @@ VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
 | ------------------------ | ---------------------------------- |
 | `VITE_SUPABASE_URL`      | あなたの Supabase プロジェクト URL |
 | `VITE_SUPABASE_ANON_KEY` | あなたの Supabase Anon Key         |
+| `R2_ENDPOINT`            | Cloudflare R2 の S3 API エンドポイント |
+| `R2_ACCESS_KEY_ID`       | R2 API トークンの Access Key ID |
+| `R2_SECRET_ACCESS_KEY`   | R2 API トークンの Secret Access Key |
+| `R2_BUCKET_NAME`         | 画像を保存する R2 バケット名 |
+| `VITE_R2_PUBLIC_BASE_URL` | 公開読み取り用URL（任意。未設定時は署名付きURLを使用） |
+
+`R2_SECRET_ACCESS_KEY` はサーバー側 API だけで使用します。Vite の仕様上、`VITE_` で始まる環境変数はクライアントバンドルへ公開されるため、R2 の秘密鍵には `VITE_` プレフィックスを付けないでください。
 
 **追加方法：**
 

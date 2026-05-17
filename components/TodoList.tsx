@@ -11,8 +11,8 @@ interface TodoListProps {
   todos: TodoItem[];
   onAddTodo: (todo: TodoItem) => void;
   onToggleTodo: (id: string) => void;
-  onDeleteTodo: (id: string) => void;
-  onUpdateTodoImages: (id: string, imageUrls: string[] | null) => void;
+  onDeleteTodo: (id: string) => Promise<boolean>;
+  onUpdateTodoImages: (id: string, imageUrls: string[] | null) => Promise<boolean>;
   currentUser: User;
   onClose: () => void;
   dateColors?: DateColor[];
@@ -405,8 +405,13 @@ const TodoList: React.FC<TodoListProps> = ({
       if (uploadedKeys.length > 0) {
         // 既存の画像URLに新しい画像を追加
         const updatedImageUrls = [...currentImageUrls, ...uploadedKeys];
-        onUpdateTodoImages(todoId, updatedImageUrls);
-        showToast(`${uploadedKeys.length}枚の画像を追加しました`);
+        const updateSucceeded = await onUpdateTodoImages(todoId, updatedImageUrls);
+        if (updateSucceeded) {
+          showToast(`${uploadedKeys.length}枚の画像を追加しました`);
+        } else {
+          await Promise.all(uploadedKeys.map((key) => deleteImageFromR2(key)));
+          showToast("画像の追加に失敗しました", "error");
+        }
       } else {
         alert("画像のアップロードに失敗しました");
       }
@@ -437,40 +442,54 @@ const TodoList: React.FC<TodoListProps> = ({
         closeConfirmModal();
         setIsDeleting(true);
 
-        // R2から画像を削除
         try {
+          const todo = todos.find((t) => t.id === todoId);
+          if (!todo) {
+            showToast("対象のタスクが見つかりません", "error");
+            return;
+          }
+
+          // データベースから参照を消せた後にR2実体を削除する
+          const updatedImageUrls = todo.imageUrls?.filter(key => key !== imageKey) || [];
+          const updateSucceeded = await onUpdateTodoImages(
+            todoId,
+            updatedImageUrls.length > 0 ? updatedImageUrls : null
+          );
+
+          if (!updateSucceeded) {
+            showToast("画像の削除に失敗しました", "error");
+            return;
+          }
+
           console.log("🗑️ R2から画像を削除中:", imageKey);
           const deleted = await deleteImageFromR2(imageKey);
           if (deleted) {
             console.log("✅ R2からの画像削除成功");
           } else {
-            console.warn("⚠️ R2からの画像削除に失敗しましたが、データベースからは削除します");
+            console.warn("⚠️ R2からの画像削除に失敗しました");
           }
+
+          // 表示用URLからも削除
+          setImageDisplayUrls((prev) => {
+            const newUrls = { ...prev };
+            if (newUrls[todoId]) {
+              const { [imageKey]: removed, ...rest } = newUrls[todoId];
+              if (Object.keys(rest).length === 0) {
+                delete newUrls[todoId];
+              } else {
+                newUrls[todoId] = rest;
+              }
+            }
+            return newUrls;
+          });
+
+          showToast("画像を削除しました");
         } catch (error) {
           console.error("❌ R2からの画像削除エラー:", error);
+          showToast("画像の削除に失敗しました", "error");
+        } finally {
+          setIsDeleting(false);
         }
-
-        // データベースから画像URLを削除
-        const todo = todos.find((t) => t.id === todoId);
-        const updatedImageUrls = todo?.imageUrls?.filter(key => key !== imageKey) || [];
-        onUpdateTodoImages(todoId, updatedImageUrls.length > 0 ? updatedImageUrls : null);
-        
-        // 表示用URLからも削除
-        setImageDisplayUrls((prev) => {
-          const newUrls = { ...prev };
-          if (newUrls[todoId]) {
-            const { [imageKey]: removed, ...rest } = newUrls[todoId];
-            if (Object.keys(rest).length === 0) {
-              delete newUrls[todoId];
-            } else {
-              newUrls[todoId] = rest;
-            }
-          }
-          return newUrls;
-        });
-
-        setIsDeleting(false);
-        showToast("画像を削除しました");
       }
     );
   };
@@ -484,27 +503,16 @@ const TodoList: React.FC<TodoListProps> = ({
         closeConfirmModal();
         setIsDeleting(true);
 
-        // タスクに画像がある場合はR2からも削除
-        if (todo?.imageUrls && todo.imageUrls.length > 0) {
-          for (const imageKey of todo.imageUrls) {
-            try {
-              console.log("🗑️ タスク削除に伴いR2から画像を削除中:", imageKey);
-              const deleted = await deleteImageFromR2(imageKey);
-              if (deleted) {
-                console.log("✅ R2からの画像削除成功:", imageKey);
-              } else {
-                console.warn("⚠️ R2からの画像削除に失敗:", imageKey);
-              }
-            } catch (error) {
-              console.error("❌ R2からの画像削除エラー:", error);
-            }
-          }
+        try {
+          // 親側でSupabase削除の成功後にR2実体を削除する
+          const deleteSucceeded = await onDeleteTodo(todoId);
+          showToast(
+            deleteSucceeded ? "タスクを削除しました" : "タスクの削除に失敗しました",
+            deleteSucceeded ? "success" : "error"
+          );
+        } finally {
+          setIsDeleting(false);
         }
-
-        // タスクを削除
-        onDeleteTodo(todoId);
-        setIsDeleting(false);
-        showToast("タスクを削除しました");
       }
     );
   };

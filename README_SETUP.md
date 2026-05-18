@@ -35,6 +35,15 @@
 # .env.local
 VITE_SUPABASE_URL=your_supabase_project_url
 VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
+
+# R2 画像機能を使用する場合（Vercel Function 側で使用、VITE_ は付けない）
+SUPABASE_URL=your_supabase_project_url
+SUPABASE_ANON_KEY=your_supabase_anon_key
+R2_ACCOUNT_ID=your_cloudflare_account_id
+R2_ACCESS_KEY_ID=your_r2_access_key_id
+R2_SECRET_ACCESS_KEY=your_r2_secret_access_key
+R2_BUCKET_NAME=your_r2_bucket_name
+R2_ENDPOINT=your_r2_endpoint
 ```
 
 ### ステップ 2: 管理者ユーザーの作成
@@ -76,6 +85,7 @@ npm run dev
 ## 🔒 セキュリティチェックリスト
 
 - [x] API キーを環境変数に移行
+- [x] R2 認証情報をブラウザバンドルから分離し、Vercel Function で署名付き URL を発行
 - [x] `.env.local`が`.gitignore`に追加済み
 - [x] Supabase Auth 認証の実装
 - [x] RLS ポリシーの厳格化
@@ -124,6 +134,7 @@ npm run dev
 2. **環境変数の設定**
 
    - Vercel/Netlify などのホスティングサービスで環境変数を設定
+   - R2 のアクセスキーとシークレットは `R2_*` として設定し、Vite がブラウザへ公開する `VITE_*` プレフィックスを付けない
 
 3. **メール確認の有効化**
 

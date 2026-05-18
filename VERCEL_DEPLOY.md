@@ -10,11 +10,18 @@
 
 ### 2. 環境変数の確認
 
-以下の環境変数を準備してください：
+以下の環境変数を準備してください。R2 のアクセスキーとシークレットは Vercel Function だけで使用するため、`VITE_` を付けないでください。
 
 ```
 VITE_SUPABASE_URL=your_supabase_project_url
 VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
+SUPABASE_URL=your_supabase_project_url
+SUPABASE_ANON_KEY=your_supabase_anon_key
+R2_ACCOUNT_ID=your_cloudflare_account_id
+R2_ACCESS_KEY_ID=your_r2_access_key_id
+R2_SECRET_ACCESS_KEY=your_r2_secret_access_key
+R2_BUCKET_NAME=your_r2_bucket_name
+R2_ENDPOINT=your_r2_endpoint
 ```
 
 ---
@@ -53,13 +60,21 @@ VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
 | ------------------------ | ---------------------------------- |
 | `VITE_SUPABASE_URL`      | あなたの Supabase プロジェクト URL |
 | `VITE_SUPABASE_ANON_KEY` | あなたの Supabase Anon Key         |
+| `SUPABASE_URL`           | あなたの Supabase プロジェクト URL |
+| `SUPABASE_ANON_KEY`      | あなたの Supabase Anon Key         |
+| `R2_ACCOUNT_ID`          | Cloudflare Account ID              |
+| `R2_ACCESS_KEY_ID`       | R2 Access Key ID                   |
+| `R2_SECRET_ACCESS_KEY`   | R2 Secret Access Key               |
+| `R2_BUCKET_NAME`         | R2 Bucket Name                     |
+| `R2_ENDPOINT`            | R2 S3 API Endpoint                 |
 
 **追加方法：**
 
 1. **Key**欄に`VITE_SUPABASE_URL`を入力
 2. **Value**欄に Supabase URL を貼り付け
 3. **Add**をクリック
-4. 同様に`VITE_SUPABASE_ANON_KEY`を追加
+4. 同様に`VITE_SUPABASE_ANON_KEY`、`SUPABASE_URL`、`SUPABASE_ANON_KEY`を追加
+5. R2 用の `R2_*` 環境変数を追加（`VITE_R2_*` は使用しない）
 
 ### ステップ 4: デプロイ実行
 
@@ -122,9 +137,10 @@ Supabase ダッシュボードで以下を確認：
 
 1. Vercel ダッシュボード → プロジェクトを選択
 2. **Settings** → **Environment Variables**
-3. 変数名が`VITE_`で始まっているか確認
-4. 値が正しく設定されているか確認
-5. 再デプロイ（**Deployments** → 最新デプロイの右側メニュー → **Redeploy**）
+3. ブラウザで使用する Supabase 変数は`VITE_`で始まっているか確認
+4. サーバー専用の R2 変数は`R2_`で始まり、`VITE_`が付いていないことを確認
+5. 値が正しく設定されているか確認
+6. 再デプロイ（**Deployments** → 最新デプロイの右側メニュー → **Redeploy**）
 
 ### ビルドエラー
 
@@ -188,6 +204,7 @@ Vercel ダッシュボードで以下を確認：
 - [ ] `.env.local`が Git にコミットされていない（`.gitignore`で除外済み）
 - [ ] Supabase の認証 URL が設定されている
 - [ ] RLS ポリシーが有効になっている
+- [ ] R2 のアクセスキーとシークレットが `R2_*` 環境変数として設定され、`VITE_R2_*` として公開されていない
 - [ ] 管理者ユーザーが作成されている
 - [ ] ローカルでビルドが成功する（`npm run build`）
 
@@ -207,6 +224,7 @@ Vercel の無料プラン（Hobby）：
 ### セキュリティ
 
 - 環境変数は暗号化されて保存されます
+- R2 認証情報は `/api/r2` の Vercel Function でのみ使用し、ブラウザには短命の署名付き URL だけを返します（Vercel Functions: https://vercel.com/docs/functions/serverless-functions/runtimes/node-js）
 - HTTPS 接続が自動で有効化されます
 - Supabase RLS で追加のセキュリティ層があります
 

@@ -8,6 +8,7 @@
 - APIキーとシークレットは`.env.local`ファイルで管理
 - ソースコードに機密情報を含めない
 - `.env.local`は`.gitignore`に追加済み
+- R2 のアクセスキーとシークレットは `R2_*` のサーバー環境変数として管理し、Vite がブラウザへ公開する `VITE_*` プレフィックスを付けない
 
 ### 2. Supabase Auth認証
 - サーバーサイドでの認証検証
@@ -24,6 +25,11 @@
 - Reactのデフォルトエスケープ機能
 - dangerouslySetInnerHTMLの使用禁止
 
+### 5. R2 画像操作の保護
+- ブラウザには R2 の恒久的な認証情報を渡さない
+- `/api/r2` の Vercel Function が Supabase Auth の JWT を検証してから署名付き URL を発行
+- 画像のアップロード・表示・削除は短命の署名付き URL または認証済み API 経由で実行
+
 ## 🚀 初期セットアップ
 
 ### 1. 環境変数の設定
@@ -34,6 +40,15 @@
 # Supabase設定
 VITE_SUPABASE_URL=your_supabase_url
 VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
+
+# サーバー専用設定（R2 画像機能）
+SUPABASE_URL=your_supabase_url
+SUPABASE_ANON_KEY=your_supabase_anon_key
+R2_ACCOUNT_ID=your_cloudflare_account_id
+R2_ACCESS_KEY_ID=your_r2_access_key_id
+R2_SECRET_ACCESS_KEY=your_r2_secret_access_key
+R2_BUCKET_NAME=your_r2_bucket_name
+R2_ENDPOINT=your_r2_endpoint
 ```
 
 ### 2. 管理者ユーザーの作成
@@ -74,6 +89,7 @@ SELECT * FROM pg_policies WHERE tablename = 'users';
 ### APIキーの管理
 - **NEVER** APIキーをGitにコミットしない
 - 本番環境では環境変数を使用
+- R2 などのシークレットは `VITE_` プレフィックスを付けない（Vite は `VITE_*` をクライアントバンドルへ含めるため）
 - 定期的にキーをローテーション
 
 ### セッション管理
@@ -84,6 +100,8 @@ SELECT * FROM pg_policies WHERE tablename = 'users';
 ## 🛡️ セキュリティチェックリスト
 
 - [ ] `.env.local`ファイルが`.gitignore`に含まれている
+- [ ] `VITE_R2_*` 環境変数を使用していない
+- [ ] R2 のアクセスキーとシークレットが Vercel のサーバー環境変数として設定されている
 - [ ] 本番環境用の強力なパスワードを設定
 - [ ] Supabaseのメール確認を有効化（本番環境）
 - [ ] RLSポリシーが有効

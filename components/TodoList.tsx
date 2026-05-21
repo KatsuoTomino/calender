@@ -11,8 +11,8 @@ interface TodoListProps {
   todos: TodoItem[];
   onAddTodo: (todo: TodoItem) => void;
   onToggleTodo: (id: string) => void;
-  onDeleteTodo: (id: string) => void;
-  onUpdateTodoImages: (id: string, imageUrls: string[] | null) => void;
+  onDeleteTodo: (id: string) => boolean | Promise<boolean>;
+  onUpdateTodoImages: (id: string, imageUrls: string[] | null) => boolean | Promise<boolean>;
   currentUser: User;
   onClose: () => void;
   dateColors?: DateColor[];
@@ -405,8 +405,14 @@ const TodoList: React.FC<TodoListProps> = ({
       if (uploadedKeys.length > 0) {
         // 既存の画像URLに新しい画像を追加
         const updatedImageUrls = [...currentImageUrls, ...uploadedKeys];
-        onUpdateTodoImages(todoId, updatedImageUrls);
-        showToast(`${uploadedKeys.length}枚の画像を追加しました`);
+        const updated = await onUpdateTodoImages(todoId, updatedImageUrls);
+        if (updated) {
+          showToast(`${uploadedKeys.length}枚の画像を追加しました`);
+        } else {
+          for (const uploadedKey of uploadedKeys) {
+            await deleteImageFromR2(uploadedKey);
+          }
+        }
       } else {
         alert("画像のアップロードに失敗しました");
       }
@@ -437,23 +443,27 @@ const TodoList: React.FC<TodoListProps> = ({
         closeConfirmModal();
         setIsDeleting(true);
 
-        // R2から画像を削除
+        // データベースから画像URLを削除
+        const todo = todos.find((t) => t.id === todoId);
+        const updatedImageUrls = todo?.imageUrls?.filter(key => key !== imageKey) || [];
+        const updated = await onUpdateTodoImages(todoId, updatedImageUrls.length > 0 ? updatedImageUrls : null);
+        if (!updated) {
+          setIsDeleting(false);
+          return;
+        }
+
+        // DBから参照を外せた後にR2を削除し、更新失敗時の画像データ損失を避ける
         try {
           console.log("🗑️ R2から画像を削除中:", imageKey);
           const deleted = await deleteImageFromR2(imageKey);
           if (deleted) {
             console.log("✅ R2からの画像削除成功");
           } else {
-            console.warn("⚠️ R2からの画像削除に失敗しましたが、データベースからは削除します");
+            console.warn("⚠️ R2からの画像削除に失敗しましたが、データベースからは削除済みです");
           }
         } catch (error) {
           console.error("❌ R2からの画像削除エラー:", error);
         }
-
-        // データベースから画像URLを削除
-        const todo = todos.find((t) => t.id === todoId);
-        const updatedImageUrls = todo?.imageUrls?.filter(key => key !== imageKey) || [];
-        onUpdateTodoImages(todoId, updatedImageUrls.length > 0 ? updatedImageUrls : null);
         
         // 表示用URLからも削除
         setImageDisplayUrls((prev) => {
@@ -484,6 +494,12 @@ const TodoList: React.FC<TodoListProps> = ({
         closeConfirmModal();
         setIsDeleting(true);
 
+        const deletedFromDb = await onDeleteTodo(todoId);
+        if (!deletedFromDb) {
+          setIsDeleting(false);
+          return;
+        }
+
         // タスクに画像がある場合はR2からも削除
         if (todo?.imageUrls && todo.imageUrls.length > 0) {
           for (const imageKey of todo.imageUrls) {
@@ -501,8 +517,6 @@ const TodoList: React.FC<TodoListProps> = ({
           }
         }
 
-        // タスクを削除
-        onDeleteTodo(todoId);
         setIsDeleting(false);
         showToast("タスクを削除しました");
       }

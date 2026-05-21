@@ -293,6 +293,12 @@ const App: React.FC = () => {
     setDateColors((prev) => {
       const existing = prev.find((dc) => dc.dateStr === dateStr);
       if (color === null) {
+        if (!existing) return prev;
+        if (existing.label) {
+          return prev.map((dc) =>
+            dc.dateStr === dateStr ? { ...dc, color: null } : dc
+          );
+        }
         return prev.filter((dc) => dc.dateStr !== dateStr);
       }
       if (existing) {
@@ -401,7 +407,7 @@ const App: React.FC = () => {
     }
   };
 
-  const handleDeleteTodo = async (id: string) => {
+  const handleDeleteTodo = async (id: string): Promise<boolean> => {
     // 楽観的更新
     const deletedTodo = todos.find((t) => t.id === id);
     setTodos((prev) => prev.filter((t) => t.id !== id));
@@ -412,10 +418,13 @@ const App: React.FC = () => {
       // 失敗したら元に戻す
       setTodos((prev) => [...prev, deletedTodo]);
       alert("Todoの削除に失敗しました");
+      return false;
     }
+
+    return success;
   };
 
-  const handleUpdateTodoImages = async (id: string, imageUrls: string[] | null) => {
+  const handleUpdateTodoImages = async (id: string, imageUrls: string[] | null): Promise<boolean> => {
     // 楽観的更新
     const originalTodo = todos.find((t) => t.id === id);
     setTodos((prev) =>
@@ -430,7 +439,10 @@ const App: React.FC = () => {
         prev.map((t) => (t.id === id ? originalTodo : t))
       );
       alert("画像の更新に失敗しました");
+      return false;
     }
+
+    return success;
   };
 
   const handleDeleteMonthTodos = async () => {
@@ -473,27 +485,6 @@ const App: React.FC = () => {
       prev.filter((t) => !monthTodos.find((mt) => mt.id === t.id))
     );
 
-    // R2から画像を削除
-    if (totalImages > 0) {
-      console.log(`🗑️ 月の削除に伴い、${totalImages}枚の画像をR2から削除中...`);
-      for (const todo of todosWithImages) {
-        if (todo.imageUrls && todo.imageUrls.length > 0) {
-          for (const imageKey of todo.imageUrls) {
-            try {
-              const deleted = await deleteImageFromR2(imageKey);
-              if (deleted) {
-                console.log("✅ R2からの画像削除成功:", imageKey);
-              } else {
-                console.warn("⚠️ R2からの画像削除に失敗:", imageKey);
-              }
-            } catch (error) {
-              console.error("❌ R2からの画像削除エラー:", error);
-            }
-          }
-        }
-      }
-    }
-
     // Supabaseで一括削除
     const success = await deleteMonthTodos(year, month);
     if (!success) {
@@ -502,6 +493,26 @@ const App: React.FC = () => {
       alert("月のTodo削除に失敗しました");
     } else {
       console.log("✅ 月のTodo削除完了");
+      // DB削除が確定してからR2を削除し、DB失敗時の画像データ損失を避ける
+      if (totalImages > 0) {
+        console.log(`🗑️ 月の削除に伴い、${totalImages}枚の画像をR2から削除中...`);
+        for (const todo of todosWithImages) {
+          if (todo.imageUrls && todo.imageUrls.length > 0) {
+            for (const imageKey of todo.imageUrls) {
+              try {
+                const deleted = await deleteImageFromR2(imageKey);
+                if (deleted) {
+                  console.log("✅ R2からの画像削除成功:", imageKey);
+                } else {
+                  console.warn("⚠️ R2からの画像削除に失敗:", imageKey);
+                }
+              } catch (error) {
+                console.error("❌ R2からの画像削除エラー:", error);
+              }
+            }
+          }
+        }
+      }
     }
   };
 

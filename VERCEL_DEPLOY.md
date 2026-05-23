@@ -15,7 +15,14 @@
 ```
 VITE_SUPABASE_URL=your_supabase_project_url
 VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
+R2_ACCOUNT_ID=your_cloudflare_account_id
+R2_ACCESS_KEY_ID=your_r2_access_key_id
+R2_SECRET_ACCESS_KEY=your_r2_secret_access_key
+R2_BUCKET_NAME=your_r2_bucket_name
+R2_ENDPOINT=https://your_account_id.r2.cloudflarestorage.com
 ```
+
+R2 のアクセスキーとシークレットは Vercel Function だけで使用します。Vite の公式ドキュメントでは `VITE_*` 変数はブラウザバンドルへ公開されるため、R2 の秘密情報には `VITE_` 接頭辞を付けないでください。
 
 ---
 
@@ -49,17 +56,22 @@ VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
 
 **Environment Variables**セクションで以下を追加：
 
-| Name                     | Value                              |
-| ------------------------ | ---------------------------------- |
-| `VITE_SUPABASE_URL`      | あなたの Supabase プロジェクト URL |
-| `VITE_SUPABASE_ANON_KEY` | あなたの Supabase Anon Key         |
+| Name                     | Value                                        |
+| ------------------------ | -------------------------------------------- |
+| `VITE_SUPABASE_URL`      | あなたの Supabase プロジェクト URL           |
+| `VITE_SUPABASE_ANON_KEY` | あなたの Supabase Anon Key                   |
+| `R2_ACCOUNT_ID`          | Cloudflare アカウント ID                     |
+| `R2_ACCESS_KEY_ID`       | R2 API トークンの Access Key ID              |
+| `R2_SECRET_ACCESS_KEY`   | R2 API トークンの Secret Access Key          |
+| `R2_BUCKET_NAME`         | R2 バケット名                                |
+| `R2_ENDPOINT`            | `https://<account-id>.r2.cloudflarestorage.com` |
 
 **追加方法：**
 
 1. **Key**欄に`VITE_SUPABASE_URL`を入力
 2. **Value**欄に Supabase URL を貼り付け
 3. **Add**をクリック
-4. 同様に`VITE_SUPABASE_ANON_KEY`を追加
+4. 同様に残りの環境変数を追加
 
 ### ステップ 4: デプロイ実行
 

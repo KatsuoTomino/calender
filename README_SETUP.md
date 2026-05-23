@@ -35,7 +35,14 @@
 # .env.local
 VITE_SUPABASE_URL=your_supabase_project_url
 VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
+R2_ACCOUNT_ID=your_cloudflare_account_id
+R2_ACCESS_KEY_ID=your_r2_access_key_id
+R2_SECRET_ACCESS_KEY=your_r2_secret_access_key
+R2_BUCKET_NAME=your_r2_bucket_name
+R2_ENDPOINT=https://your_account_id.r2.cloudflarestorage.com
 ```
+
+R2 の秘密情報はサーバー API でのみ使用します。`VITE_` で始まる環境変数は Vite によりブラウザへ公開されるため、R2 のアクセスキーやシークレットには使用しないでください。
 
 ### ステップ 2: 管理者ユーザーの作成
 

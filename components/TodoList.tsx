@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from "react";
 import { TodoItem, User, DateColor, DateColorType } from "../types";
 import { generateId } from "../services/storageService";
-import { uploadImageToR2, getImageUrl, deleteImageFromR2 } from "../services/r2Service";
+import { uploadImageToR2, getImageUrl } from "../services/r2Service";
 import Button from "./Button";
 
 interface TodoListProps {
@@ -437,19 +437,6 @@ const TodoList: React.FC<TodoListProps> = ({
         closeConfirmModal();
         setIsDeleting(true);
 
-        // R2から画像を削除
-        try {
-          console.log("🗑️ R2から画像を削除中:", imageKey);
-          const deleted = await deleteImageFromR2(imageKey);
-          if (deleted) {
-            console.log("✅ R2からの画像削除成功");
-          } else {
-            console.warn("⚠️ R2からの画像削除に失敗しましたが、データベースからは削除します");
-          }
-        } catch (error) {
-          console.error("❌ R2からの画像削除エラー:", error);
-        }
-
         // データベースから画像URLを削除
         const todo = todos.find((t) => t.id === todoId);
         const updatedImageUrls = todo?.imageUrls?.filter(key => key !== imageKey) || [];
@@ -483,23 +470,6 @@ const TodoList: React.FC<TodoListProps> = ({
       async () => {
         closeConfirmModal();
         setIsDeleting(true);
-
-        // タスクに画像がある場合はR2からも削除
-        if (todo?.imageUrls && todo.imageUrls.length > 0) {
-          for (const imageKey of todo.imageUrls) {
-            try {
-              console.log("🗑️ タスク削除に伴いR2から画像を削除中:", imageKey);
-              const deleted = await deleteImageFromR2(imageKey);
-              if (deleted) {
-                console.log("✅ R2からの画像削除成功:", imageKey);
-              } else {
-                console.warn("⚠️ R2からの画像削除に失敗:", imageKey);
-              }
-            } catch (error) {
-              console.error("❌ R2からの画像削除エラー:", error);
-            }
-          }
-        }
 
         // タスクを削除
         onDeleteTodo(todoId);

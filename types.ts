@@ -10,7 +10,7 @@ export type TodoType = 'daily' | 'important' | 'shopping';
 
 export interface TodoItem {
   id: string;
-  dateStr: string; // YYYY-MM-DD または 'important' | 'shopping' | 'monthly'
+  dateStr: string; // YYYY-MM-DD、旧YYYY-MM、または 'important' | 'shopping' | 'monthly'
   text: string;
   completed: boolean;
   createdBy: string; // User ID

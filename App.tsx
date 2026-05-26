@@ -44,12 +44,13 @@ const App: React.FC = () => {
       if (authUser) {
         // 既存のユーザー情報を読み込む（アバター画像を含む）
         const storedUser = getStoredUser();
+        const sameStoredUser = storedUser?.id === authUser.id ? storedUser : null;
         const appUser: User = {
           id: authUser.id,
           name: authUser.user_metadata?.name || "ユーザー",
-          role: storedUser?.role || "partner",
-          avatarColor: storedUser?.avatarColor || "bg-purple-500",
-          avatarImageUrl: storedUser?.avatarImageUrl,
+          role: sameStoredUser?.role || "partner",
+          avatarColor: sameStoredUser?.avatarColor || "bg-purple-500",
+          avatarImageUrl: sameStoredUser?.avatarImageUrl,
         };
         setUser(appUser);
         saveUser(appUser);
@@ -188,26 +189,6 @@ const App: React.FC = () => {
     }
 
     try {
-      console.log("🔄 古いアバター画像を削除中...");
-      // 古いアバター画像を削除（複数の拡張子を試す）
-      const extensions = ['jpg', 'jpeg', 'png', 'webp', 'gif'];
-      for (const ext of extensions) {
-        const oldAvatarKey = `users/${user.id}/avatar.${ext}`;
-        try {
-          await deleteImageFromR2(oldAvatarKey);
-        } catch (error) {
-          // 404エラーは無視（存在しないファイル）
-        }
-      }
-      // 後方互換性: localStorageに保存されているキーも削除を試みる
-      if (user.avatarImageUrl) {
-        try {
-          await deleteImageFromR2(user.avatarImageUrl);
-        } catch (error) {
-          // エラーは無視
-        }
-      }
-
       console.log("📤 R2にアップロード中...");
       // R2にアップロード
       const uploadedKey = await uploadAvatarToR2(file, user.id);
@@ -218,6 +199,27 @@ const App: React.FC = () => {
       }
 
       console.log("✅ アップロード成功:", uploadedKey);
+
+      console.log("🔄 古いアバター画像を削除中...");
+      // 新しいアバターの保存成功後に旧キーだけ削除し、失敗時の画像喪失を避ける。
+      const extensions = ['jpg', 'jpeg', 'png', 'webp', 'gif'];
+      for (const ext of extensions) {
+        const oldAvatarKey = `users/${user.id}/avatar.${ext}`;
+        if (oldAvatarKey === uploadedKey) continue;
+        try {
+          await deleteImageFromR2(oldAvatarKey);
+        } catch (error) {
+          // 404エラーは無視（存在しないファイル）
+        }
+      }
+      // 後方互換性: localStorageに保存されているキーも削除を試みる
+      if (user.avatarImageUrl && user.avatarImageUrl !== uploadedKey) {
+        try {
+          await deleteImageFromR2(user.avatarImageUrl);
+        } catch (error) {
+          // エラーは無視
+        }
+      }
 
       // ユーザー情報を更新（後方互換性のためlocalStorageにも保存）
       const updatedUser: User = {
@@ -264,12 +266,13 @@ const App: React.FC = () => {
     if (authUser) {
       // 既存のユーザー情報を読み込む（アバター画像を含む）
       const storedUser = getStoredUser();
+      const sameStoredUser = storedUser?.id === authUser.id ? storedUser : null;
       const appUser: User = {
         id: authUser.id,
         name: authUser.user_metadata?.name || "ユーザー",
-        role: storedUser?.role || "partner",
-        avatarColor: storedUser?.avatarColor || "bg-purple-500",
-        avatarImageUrl: storedUser?.avatarImageUrl,
+        role: sameStoredUser?.role || "partner",
+        avatarColor: sameStoredUser?.avatarColor || "bg-purple-500",
+        avatarImageUrl: sameStoredUser?.avatarImageUrl,
       };
       setUser(appUser);
       saveUser(appUser);
@@ -293,6 +296,11 @@ const App: React.FC = () => {
     setDateColors((prev) => {
       const existing = prev.find((dc) => dc.dateStr === dateStr);
       if (color === null) {
+        if (existing?.label) {
+          return prev.map((dc) =>
+            dc.dateStr === dateStr ? { ...dc, color: null } : dc
+          );
+        }
         return prev.filter((dc) => dc.dateStr !== dateStr);
       }
       if (existing) {
@@ -401,7 +409,7 @@ const App: React.FC = () => {
     }
   };
 
-  const handleDeleteTodo = async (id: string) => {
+  const handleDeleteTodo = async (id: string): Promise<boolean> => {
     // 楽観的更新
     const deletedTodo = todos.find((t) => t.id === id);
     setTodos((prev) => prev.filter((t) => t.id !== id));
@@ -412,10 +420,16 @@ const App: React.FC = () => {
       // 失敗したら元に戻す
       setTodos((prev) => [...prev, deletedTodo]);
       alert("Todoの削除に失敗しました");
+      return false;
     }
+    if (!success) {
+      alert("Todoの削除に失敗しました");
+      return false;
+    }
+    return true;
   };
 
-  const handleUpdateTodoImages = async (id: string, imageUrls: string[] | null) => {
+  const handleUpdateTodoImages = async (id: string, imageUrls: string[] | null): Promise<boolean> => {
     // 楽観的更新
     const originalTodo = todos.find((t) => t.id === id);
     setTodos((prev) =>
@@ -430,19 +444,23 @@ const App: React.FC = () => {
         prev.map((t) => (t.id === id ? originalTodo : t))
       );
       alert("画像の更新に失敗しました");
+      return false;
     }
+    if (!success) {
+      alert("画像の更新に失敗しました");
+      return false;
+    }
+    return true;
   };
 
   const handleDeleteMonthTodos = async () => {
     const year = currentDate.getFullYear();
     const month = currentDate.getMonth() + 1;
+    const startDateStr = formatLocalDate(new Date(year, currentDate.getMonth(), 1));
+    const endDateStr = formatLocalDate(new Date(year, currentDate.getMonth() + 1, 0));
 
     const monthTodos = todos.filter((todo) => {
-      const todoDate = new Date(todo.dateStr);
-      return (
-        todoDate.getFullYear() === year &&
-        todoDate.getMonth() === currentDate.getMonth()
-      );
+      return todo.dateStr >= startDateStr && todo.dateStr <= endDateStr;
     });
 
     if (monthTodos.length === 0) {
@@ -473,7 +491,16 @@ const App: React.FC = () => {
       prev.filter((t) => !monthTodos.find((mt) => mt.id === t.id))
     );
 
-    // R2から画像を削除
+    // Supabaseで一括削除
+    const success = await deleteMonthTodos(year, month);
+    if (!success) {
+      // 失敗したら元に戻す
+      setTodos((prev) => [...prev, ...monthTodos]);
+      alert("月のTodo削除に失敗しました");
+      return;
+    }
+
+    // DB削除が確定した後でR2をクリーンアップする。
     if (totalImages > 0) {
       console.log(`🗑️ 月の削除に伴い、${totalImages}枚の画像をR2から削除中...`);
       for (const todo of todosWithImages) {
@@ -494,15 +521,7 @@ const App: React.FC = () => {
       }
     }
 
-    // Supabaseで一括削除
-    const success = await deleteMonthTodos(year, month);
-    if (!success) {
-      // 失敗したら元に戻す
-      setTodos((prev) => [...prev, ...monthTodos]);
-      alert("月のTodo削除に失敗しました");
-    } else {
-      console.log("✅ 月のTodo削除完了");
-    }
+    console.log("✅ 月のTodo削除完了");
   };
 
   // Filter todos for selected date (use local timezone)

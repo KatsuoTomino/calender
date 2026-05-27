@@ -27,6 +27,25 @@ const s3Client = accountId && accessKeyId && secretAccessKey && bucketName && en
     })
   : null;
 
+export function normalizeR2ObjectKey(imageKeyOrUrl: string): string {
+  let key = imageKeyOrUrl;
+
+  if (imageKeyOrUrl.startsWith("http://") || imageKeyOrUrl.startsWith("https://")) {
+    try {
+      const url = new URL(imageKeyOrUrl);
+      key = url.pathname.substring(1);
+    } catch {
+      key = imageKeyOrUrl;
+    }
+  }
+
+  if (bucketName && key.startsWith(`${bucketName}/`)) {
+    key = key.substring(bucketName.length + 1);
+  }
+
+  return key;
+}
+
 /**
  * ユーザーアバター画像をR2にアップロード
  * @param file アップロードする画像ファイル
@@ -149,23 +168,7 @@ export async function getImageUrl(imageKeyOrUrl: string): Promise<string | null>
   }
 
   try {
-    // URLの場合はキーを抽出、そうでなければそのまま使用
-    let imageKey: string;
-    if (imageKeyOrUrl.startsWith("http://") || imageKeyOrUrl.startsWith("https://")) {
-      try {
-        const url = new URL(imageKeyOrUrl);
-        imageKey = url.pathname.substring(1); // 先頭の/を削除
-        // バケット名が含まれている場合は除去
-        if (imageKey.startsWith(`${bucketName}/`)) {
-          imageKey = imageKey.substring(bucketName.length + 1);
-        }
-      } catch {
-        // URLのパースに失敗した場合はそのまま使用
-        imageKey = imageKeyOrUrl;
-      }
-    } else {
-      imageKey = imageKeyOrUrl;
-    }
+    const imageKey = normalizeR2ObjectKey(imageKeyOrUrl);
 
     // パブリックURLを試す
     const publicUrl = `${endpoint}/${imageKey}`;
@@ -204,14 +207,7 @@ export async function deleteImageFromR2(imageKey: string): Promise<boolean> {
   }
 
   try {
-    // URLの場合はキーを抽出、そうでなければそのまま使用
-    let key: string;
-    if (imageKey.startsWith("http://") || imageKey.startsWith("https://")) {
-      const url = new URL(imageKey);
-      key = url.pathname.substring(1); // 先頭の/を削除
-    } else {
-      key = imageKey;
-    }
+    const key = normalizeR2ObjectKey(imageKey);
 
     const command = new DeleteObjectCommand({
       Bucket: bucketName,
@@ -311,8 +307,7 @@ export async function getPresignedUrl(
   }
 
   try {
-    const url = new URL(imageUrl);
-    const key = url.pathname.substring(1);
+    const key = normalizeR2ObjectKey(imageUrl);
 
     const command = new GetObjectCommand({
       Bucket: bucketName,

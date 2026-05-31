@@ -172,7 +172,7 @@ export async function deleteMonthTodos(
       `🗑️ ${year}年${month}月のTodoを削除中... (${startDateStr} ~ ${endDateStr})`
     );
 
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from("todos")
       .delete()
       .gte("date_str", startDateStr)

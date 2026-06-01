@@ -17,6 +17,7 @@ import {
 } from "./services/authService";
 import { deleteImageFromR2, uploadAvatarToR2, getImageUrl, getAvatarFromR2 } from "./services/r2Service";
 import { fetchDateColors, setDateColor, setDateLabel, subscribeDateColorChanges } from "./services/dateColorService";
+import { applyDateColorUpdate, applyDateLabelUpdate } from "./utils/dateColors";
 import Login from "./components/Login";
 import Calendar from "./components/Calendar";
 import TodoList from "./components/TodoList";
@@ -290,18 +291,9 @@ const App: React.FC = () => {
     if (!user) return;
 
     // 楽観的更新
-    setDateColors((prev) => {
-      const existing = prev.find((dc) => dc.dateStr === dateStr);
-      if (color === null) {
-        return prev.filter((dc) => dc.dateStr !== dateStr);
-      }
-      if (existing) {
-        return prev.map((dc) =>
-          dc.dateStr === dateStr ? { ...dc, color } : dc
-        );
-      }
-      return [...prev, { id: crypto.randomUUID(), dateStr, color, createdBy: user.id }];
-    });
+    setDateColors((prev) =>
+      applyDateColorUpdate(prev, dateStr, color, user.id)
+    );
 
     const success = await setDateColor(dateStr, color, user.id);
     if (!success) {
@@ -312,20 +304,9 @@ const App: React.FC = () => {
   const handleSetDateLabel = async (dateStr: string, label: string | null) => {
     if (!user) return;
 
-    setDateColors((prev) => {
-      const existing = prev.find((dc) => dc.dateStr === dateStr);
-      const trimmed = label?.trim() || null;
-      if (existing) {
-        if (!trimmed && !existing.color) {
-          return prev.filter((dc) => dc.dateStr !== dateStr);
-        }
-        return prev.map((dc) =>
-          dc.dateStr === dateStr ? { ...dc, label: trimmed } : dc
-        );
-      }
-      if (!trimmed) return prev;
-      return [...prev, { id: crypto.randomUUID(), dateStr, color: null, label: trimmed, createdBy: user.id }];
-    });
+    setDateColors((prev) =>
+      applyDateLabelUpdate(prev, dateStr, label, user.id)
+    );
 
     const success = await setDateLabel(dateStr, label, user.id);
     if (!success) {

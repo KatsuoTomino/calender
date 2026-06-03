@@ -1,5 +1,9 @@
 import { supabase } from "./supabaseClient";
-import { DateColor, DateColorType } from "../types";
+import type { DateColor, DateColorType } from "../types";
+import {
+  getDateColorClearAction,
+  getDateLabelClearAction,
+} from "../utils/dateColors";
 
 export async function fetchDateColors(): Promise<DateColor[]> {
   try {
@@ -33,13 +37,21 @@ export async function setDateColor(
   try {
     if (color === null) {
       // 色を解除するとき、ラベルが残っていればレコードを残す
-      const { data } = await supabase
+      const { data, error: lookupError } = await supabase
         .from("date_colors")
         .select("label")
         .eq("date_str", dateStr)
-        .single();
+        .maybeSingle();
 
-      if (data?.label) {
+      // Supabase は SELECT 失敗を error で返すため、削除前に必ず確認する。
+      // https://supabase.com/docs/reference/javascript/select#handling-errors
+      const action = getDateColorClearAction(data, lookupError);
+      if (action === "abort") {
+        console.error("DateColor確認エラー:", lookupError);
+        return false;
+      }
+
+      if (action === "clear-color") {
         const { error } = await supabase
           .from("date_colors")
           .update({ color: null, updated_at: new Date().toISOString() })
@@ -95,13 +107,21 @@ export async function setDateLabel(
   try {
     if (!label || label.trim() === "") {
       // ラベルを消すとき、色も無ければレコード削除
-      const { data } = await supabase
+      const { data, error: lookupError } = await supabase
         .from("date_colors")
         .select("color")
         .eq("date_str", dateStr)
-        .single();
+        .maybeSingle();
 
-      if (data?.color) {
+      // Supabase は SELECT 失敗を error で返すため、削除前に必ず確認する。
+      // https://supabase.com/docs/reference/javascript/select#handling-errors
+      const action = getDateLabelClearAction(data, lookupError);
+      if (action === "abort") {
+        console.error("DateLabel確認エラー:", lookupError);
+        return false;
+      }
+
+      if (action === "clear-label") {
         const { error } = await supabase
           .from("date_colors")
           .update({ label: null, updated_at: new Date().toISOString() })

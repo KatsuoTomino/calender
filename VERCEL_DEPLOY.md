@@ -15,7 +15,15 @@
 ```
 VITE_SUPABASE_URL=your_supabase_project_url
 VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
+R2_ACCOUNT_ID=your_cloudflare_account_id
+R2_ACCESS_KEY_ID=your_r2_access_key_id
+R2_SECRET_ACCESS_KEY=your_r2_secret_access_key
+R2_BUCKET_NAME=your_r2_bucket_name
+# 任意: 未設定の場合は https://{R2_ACCOUNT_ID}.r2.cloudflarestorage.com を使用
+R2_ENDPOINT=your_r2_s3_endpoint
 ```
+
+`R2_*` は Vercel Function のサーバー側だけで使用します。Vite 公式ドキュメントの通り、`VITE_` で始まる変数はブラウザ向けバンドルに含まれるため、R2 のシークレットには使用しないでください。
 
 ---
 
@@ -49,17 +57,22 @@ VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
 
 **Environment Variables**セクションで以下を追加：
 
-| Name                     | Value                              |
-| ------------------------ | ---------------------------------- |
-| `VITE_SUPABASE_URL`      | あなたの Supabase プロジェクト URL |
-| `VITE_SUPABASE_ANON_KEY` | あなたの Supabase Anon Key         |
+| Name                     | Value                                  |
+| ------------------------ | -------------------------------------- |
+| `VITE_SUPABASE_URL`      | あなたの Supabase プロジェクト URL     |
+| `VITE_SUPABASE_ANON_KEY` | あなたの Supabase Anon Key             |
+| `R2_ACCOUNT_ID`          | Cloudflare アカウント ID               |
+| `R2_ACCESS_KEY_ID`       | R2 S3 API アクセスキー ID              |
+| `R2_SECRET_ACCESS_KEY`   | R2 S3 API シークレットアクセスキー     |
+| `R2_BUCKET_NAME`         | R2 バケット名                          |
+| `R2_ENDPOINT`            | 任意: R2 S3 API エンドポイント         |
 
 **追加方法：**
 
 1. **Key**欄に`VITE_SUPABASE_URL`を入力
 2. **Value**欄に Supabase URL を貼り付け
 3. **Add**をクリック
-4. 同様に`VITE_SUPABASE_ANON_KEY`を追加
+4. 同様に`VITE_SUPABASE_ANON_KEY`と`R2_*`を追加
 
 ### ステップ 4: デプロイ実行
 
@@ -122,7 +135,7 @@ Supabase ダッシュボードで以下を確認：
 
 1. Vercel ダッシュボード → プロジェクトを選択
 2. **Settings** → **Environment Variables**
-3. 変数名が`VITE_`で始まっているか確認
+3. Supabase のクライアント用変数は`VITE_`で始まり、R2 のシークレットは`R2_`で始まっているか確認
 4. 値が正しく設定されているか確認
 5. 再デプロイ（**Deployments** → 最新デプロイの右側メニュー → **Redeploy**）
 
@@ -186,6 +199,7 @@ Vercel ダッシュボードで以下を確認：
 
 - [ ] 環境変数が正しく設定されている
 - [ ] `.env.local`が Git にコミットされていない（`.gitignore`で除外済み）
+- [ ] R2 のシークレットが`VITE_`ではなく`R2_`で設定されている
 - [ ] Supabase の認証 URL が設定されている
 - [ ] RLS ポリシーが有効になっている
 - [ ] 管理者ユーザーが作成されている

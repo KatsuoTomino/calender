@@ -1,5 +1,6 @@
 import { supabase } from "./supabaseClient";
 import { TodoItem } from "../types";
+import { getMonthDateRange } from "../utils/todoDates";
 
 // TodoをSupabaseから取得
 export async function fetchTodos(): Promise<TodoItem[]> {
@@ -157,26 +158,34 @@ export async function deleteTodo(id: string): Promise<boolean> {
   }
 }
 
+// 指定したTodo IDだけを削除
+export async function deleteTodosByIds(ids: string[]): Promise<boolean> {
+  if (ids.length === 0) {
+    return true;
+  }
+
+  try {
+    const { error } = await supabase.from("todos").delete().in("id", ids);
+
+    if (error) {
+      console.error("Todoの一括削除エラー:", error);
+      return false;
+    }
+
+    return true;
+  } catch (err) {
+    console.error("予期しないエラー:", err);
+    return false;
+  }
+}
+
 // 月のTodoを一括削除
 export async function deleteMonthTodos(
   year: number,
   month: number
 ): Promise<boolean> {
   try {
-    // Helper to format date as YYYY-MM-DD in local timezone
-    const formatLocalDate = (date: Date): string => {
-      const y = date.getFullYear();
-      const m = String(date.getMonth() + 1).padStart(2, "0");
-      const d = String(date.getDate()).padStart(2, "0");
-      return `${y}-${m}-${d}`;
-    };
-
-    // 月の最初の日と最後の日を計算
-    const startDate = new Date(year, month - 1, 1); // month は 1-12
-    const endDate = new Date(year, month, 0); // 月の最後の日
-
-    const startDateStr = formatLocalDate(startDate);
-    const endDateStr = formatLocalDate(endDate);
+    const { startDateStr, endDateStr } = getMonthDateRange(year, month);
 
     console.log(
       `🗑️ ${year}年${month}月のTodoを削除中... (${startDateStr} ~ ${endDateStr})`

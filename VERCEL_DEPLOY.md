@@ -15,6 +15,12 @@
 ```
 VITE_SUPABASE_URL=your_supabase_project_url
 VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
+R2_ACCOUNT_ID=your_cloudflare_account_id
+R2_ACCESS_KEY_ID=your_r2_access_key_id
+R2_SECRET_ACCESS_KEY=your_r2_secret_access_key
+R2_BUCKET_NAME=your_r2_bucket_name
+# 任意: 未指定なら https://<R2_ACCOUNT_ID>.r2.cloudflarestorage.com を使用
+R2_ENDPOINT=your_r2_s3_endpoint
 ```
 
 ---
@@ -53,6 +59,11 @@ VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
 | ------------------------ | ---------------------------------- |
 | `VITE_SUPABASE_URL`      | あなたの Supabase プロジェクト URL |
 | `VITE_SUPABASE_ANON_KEY` | あなたの Supabase Anon Key         |
+| `R2_ACCOUNT_ID`          | Cloudflare アカウント ID           |
+| `R2_ACCESS_KEY_ID`       | R2 API トークンの Access Key       |
+| `R2_SECRET_ACCESS_KEY`   | R2 API トークンの Secret Key       |
+| `R2_BUCKET_NAME`         | R2 バケット名                      |
+| `R2_ENDPOINT`            | R2 S3 API エンドポイント（任意）   |
 
 **追加方法：**
 
@@ -122,7 +133,7 @@ Supabase ダッシュボードで以下を確認：
 
 1. Vercel ダッシュボード → プロジェクトを選択
 2. **Settings** → **Environment Variables**
-3. 変数名が`VITE_`で始まっているか確認
+3. Supabase のクライアント用変数だけが`VITE_`で始まっているか確認
 4. 値が正しく設定されているか確認
 5. 再デプロイ（**Deployments** → 最新デプロイの右側メニュー → **Redeploy**）
 
@@ -186,6 +197,7 @@ Vercel ダッシュボードで以下を確認：
 
 - [ ] 環境変数が正しく設定されている
 - [ ] `.env.local`が Git にコミットされていない（`.gitignore`で除外済み）
+- [ ] R2 のシークレットは `VITE_` なしのサーバー専用環境変数に設定している
 - [ ] Supabase の認証 URL が設定されている
 - [ ] RLS ポリシーが有効になっている
 - [ ] 管理者ユーザーが作成されている

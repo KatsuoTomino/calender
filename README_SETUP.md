@@ -35,6 +35,14 @@
 # .env.local
 VITE_SUPABASE_URL=your_supabase_project_url
 VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
+
+# Cloudflare R2（画像機能を使う場合。サーバー専用なので VITE_ は付けない）
+R2_ACCOUNT_ID=your_cloudflare_account_id
+R2_ACCESS_KEY_ID=your_r2_access_key_id
+R2_SECRET_ACCESS_KEY=your_r2_secret_access_key
+R2_BUCKET_NAME=your_r2_bucket_name
+# 任意
+R2_ENDPOINT=your_r2_s3_endpoint
 ```
 
 ### ステップ 2: 管理者ユーザーの作成
@@ -77,6 +85,7 @@ npm run dev
 
 - [x] API キーを環境変数に移行
 - [x] `.env.local`が`.gitignore`に追加済み
+- [x] R2 シークレットを Vercel Function 側だけで使用
 - [x] Supabase Auth 認証の実装
 - [x] RLS ポリシーの厳格化
 - [x] 認証状態の管理を改善

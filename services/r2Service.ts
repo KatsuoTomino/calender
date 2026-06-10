@@ -43,9 +43,9 @@ async function requestR2<T>(
     });
     const payload = (await response.json().catch(() => ({}))) as R2ApiResponse<T>;
 
-    if (!payload.ok) {
+    if (payload.ok !== true) {
       console.error("R2 APIエラー:", payload);
-      return { ok: false, error: payload.error };
+      return { ok: false, error: "error" in payload ? payload.error : undefined };
     }
 
     if (!response.ok) {

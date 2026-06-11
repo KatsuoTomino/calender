@@ -15,6 +15,11 @@
 ```
 VITE_SUPABASE_URL=your_supabase_project_url
 VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
+R2_ACCOUNT_ID=your_cloudflare_account_id
+R2_ACCESS_KEY_ID=your_r2_access_key_id
+R2_SECRET_ACCESS_KEY=your_r2_secret_access_key
+R2_BUCKET_NAME=your_r2_bucket_name
+# 任意: R2_ENDPOINT=https://<account_id>.r2.cloudflarestorage.com
 ```
 
 ---
@@ -49,10 +54,17 @@ VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
 
 **Environment Variables**セクションで以下を追加：
 
-| Name                     | Value                              |
-| ------------------------ | ---------------------------------- |
-| `VITE_SUPABASE_URL`      | あなたの Supabase プロジェクト URL |
-| `VITE_SUPABASE_ANON_KEY` | あなたの Supabase Anon Key         |
+| Name                   | Value                              |
+| ---------------------- | ---------------------------------- |
+| `VITE_SUPABASE_URL`    | あなたの Supabase プロジェクト URL |
+| `VITE_SUPABASE_ANON_KEY` | あなたの Supabase Anon Key       |
+| `R2_ACCOUNT_ID`        | Cloudflare アカウント ID           |
+| `R2_ACCESS_KEY_ID`     | R2 アクセスキー ID                 |
+| `R2_SECRET_ACCESS_KEY` | R2 シークレットアクセスキー        |
+| `R2_BUCKET_NAME`       | R2 バケット名                      |
+| `R2_ENDPOINT`          | 任意: R2 エンドポイント            |
+
+`R2_*`はサーバー側の `/api/r2` だけで使用します。Vite は `VITE_*` をブラウザ用バンドルへ埋め込むため、R2 のシークレットには `VITE_` 接頭辞を付けないでください。
 
 **追加方法：**
 

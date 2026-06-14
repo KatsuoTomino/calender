@@ -1,4 +1,4 @@
-import { TodoItem } from "../types";
+import type { TodoItem } from "../types";
 
 export function getMonthDateBounds(year: number, month: number): { startDateStr: string; endDateStr: string } {
   const monthText = String(month).padStart(2, "0");

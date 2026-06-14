@@ -9,7 +9,7 @@ import {
   normalizeR2Key,
 } from "../utils/r2Keys.ts";
 import { getMonthDateBounds, isTodoInMonth } from "../utils/todoDates.ts";
-import { DateColor } from "../types.ts";
+import type { DateColor } from "../types.ts";
 
 test("clearing a date color preserves an existing label", () => {
   const previous: DateColor[] = [

@@ -17,6 +17,8 @@ import {
 } from "./services/authService";
 import { deleteImageFromR2, uploadAvatarToR2, getImageUrl, getAvatarFromR2 } from "./services/r2Service";
 import { fetchDateColors, setDateColor, setDateLabel, subscribeDateColorChanges } from "./services/dateColorService";
+import { applyDateColorUpdate, applyDateLabelUpdate } from "./utils/dateColors";
+import { isTodoInMonth } from "./utils/todoDates";
 import Login from "./components/Login";
 import Calendar from "./components/Calendar";
 import TodoList from "./components/TodoList";
@@ -188,26 +190,6 @@ const App: React.FC = () => {
     }
 
     try {
-      console.log("🔄 古いアバター画像を削除中...");
-      // 古いアバター画像を削除（複数の拡張子を試す）
-      const extensions = ['jpg', 'jpeg', 'png', 'webp', 'gif'];
-      for (const ext of extensions) {
-        const oldAvatarKey = `users/${user.id}/avatar.${ext}`;
-        try {
-          await deleteImageFromR2(oldAvatarKey);
-        } catch (error) {
-          // 404エラーは無視（存在しないファイル）
-        }
-      }
-      // 後方互換性: localStorageに保存されているキーも削除を試みる
-      if (user.avatarImageUrl) {
-        try {
-          await deleteImageFromR2(user.avatarImageUrl);
-        } catch (error) {
-          // エラーは無視
-        }
-      }
-
       console.log("📤 R2にアップロード中...");
       // R2にアップロード
       const uploadedKey = await uploadAvatarToR2(file, user.id);
@@ -219,6 +201,27 @@ const App: React.FC = () => {
 
       console.log("✅ アップロード成功:", uploadedKey);
 
+      console.log("🔄 古いアバター画像を削除中...");
+      // アップロード成功後に古い画像だけ削除する（失敗時に既存アバターを失わないため）。
+      const extensions = ['jpg', 'jpeg', 'png', 'webp', 'gif'];
+      for (const ext of extensions) {
+        const oldAvatarKey = `users/${user.id}/avatar.${ext}`;
+        if (oldAvatarKey === uploadedKey) continue;
+        try {
+          await deleteImageFromR2(oldAvatarKey);
+        } catch (error) {
+          // 404エラーは無視（存在しないファイル）
+        }
+      }
+      // 後方互換性: localStorageに保存されているキーも削除を試みる
+      if (user.avatarImageUrl && user.avatarImageUrl !== uploadedKey) {
+        try {
+          await deleteImageFromR2(user.avatarImageUrl);
+        } catch (error) {
+          // エラーは無視
+        }
+      }
+
       // ユーザー情報を更新（後方互換性のためlocalStorageにも保存）
       const updatedUser: User = {
         ...user,
@@ -228,9 +231,9 @@ const App: React.FC = () => {
       saveUser(updatedUser);
       console.log("💾 ユーザー情報をlocalStorageに保存しました（後方互換性）");
 
-      // R2から直接取得して表示（他の端末でも動作する）
-      console.log("🖼️ R2からアバター画像を取得中... userId:", user.id);
-      const displayUrl = await getAvatarFromR2(user.id);
+      // アップロードしたキーから表示URLを取得する
+      console.log("🖼️ R2からアバター画像を取得中... key:", uploadedKey);
+      const displayUrl = await getImageUrl(uploadedKey);
       if (displayUrl) {
         setAvatarImageUrl(displayUrl);
         console.log("✅ アバター画像を更新しました（R2から取得）");
@@ -291,16 +294,7 @@ const App: React.FC = () => {
 
     // 楽観的更新
     setDateColors((prev) => {
-      const existing = prev.find((dc) => dc.dateStr === dateStr);
-      if (color === null) {
-        return prev.filter((dc) => dc.dateStr !== dateStr);
-      }
-      if (existing) {
-        return prev.map((dc) =>
-          dc.dateStr === dateStr ? { ...dc, color } : dc
-        );
-      }
-      return [...prev, { id: crypto.randomUUID(), dateStr, color, createdBy: user.id }];
+      return applyDateColorUpdate(prev, dateStr, color, user.id, () => crypto.randomUUID());
     });
 
     const success = await setDateColor(dateStr, color, user.id);
@@ -313,18 +307,7 @@ const App: React.FC = () => {
     if (!user) return;
 
     setDateColors((prev) => {
-      const existing = prev.find((dc) => dc.dateStr === dateStr);
-      const trimmed = label?.trim() || null;
-      if (existing) {
-        if (!trimmed && !existing.color) {
-          return prev.filter((dc) => dc.dateStr !== dateStr);
-        }
-        return prev.map((dc) =>
-          dc.dateStr === dateStr ? { ...dc, label: trimmed } : dc
-        );
-      }
-      if (!trimmed) return prev;
-      return [...prev, { id: crypto.randomUUID(), dateStr, color: null, label: trimmed, createdBy: user.id }];
+      return applyDateLabelUpdate(prev, dateStr, label, user.id, () => crypto.randomUUID());
     });
 
     const success = await setDateLabel(dateStr, label, user.id);
@@ -401,7 +384,7 @@ const App: React.FC = () => {
     }
   };
 
-  const handleDeleteTodo = async (id: string) => {
+  const handleDeleteTodo = async (id: string): Promise<boolean> => {
     // 楽観的更新
     const deletedTodo = todos.find((t) => t.id === id);
     setTodos((prev) => prev.filter((t) => t.id !== id));
@@ -412,10 +395,12 @@ const App: React.FC = () => {
       // 失敗したら元に戻す
       setTodos((prev) => [...prev, deletedTodo]);
       alert("Todoの削除に失敗しました");
+      return false;
     }
+    return success;
   };
 
-  const handleUpdateTodoImages = async (id: string, imageUrls: string[] | null) => {
+  const handleUpdateTodoImages = async (id: string, imageUrls: string[] | null): Promise<boolean> => {
     // 楽観的更新
     const originalTodo = todos.find((t) => t.id === id);
     setTodos((prev) =>
@@ -430,7 +415,9 @@ const App: React.FC = () => {
         prev.map((t) => (t.id === id ? originalTodo : t))
       );
       alert("画像の更新に失敗しました");
+      return false;
     }
+    return success;
   };
 
   const handleDeleteMonthTodos = async () => {
@@ -438,11 +425,7 @@ const App: React.FC = () => {
     const month = currentDate.getMonth() + 1;
 
     const monthTodos = todos.filter((todo) => {
-      const todoDate = new Date(todo.dateStr);
-      return (
-        todoDate.getFullYear() === year &&
-        todoDate.getMonth() === currentDate.getMonth()
-      );
+      return isTodoInMonth(todo, year, month);
     });
 
     if (monthTodos.length === 0) {
@@ -473,10 +456,31 @@ const App: React.FC = () => {
       prev.filter((t) => !monthTodos.find((mt) => mt.id === t.id))
     );
 
-    // R2から画像を削除
-    if (totalImages > 0) {
-      console.log(`🗑️ 月の削除に伴い、${totalImages}枚の画像をR2から削除中...`);
-      for (const todo of todosWithImages) {
+    // Supabaseで一括削除
+    const deletedIds = await deleteMonthTodos(monthTodos.map((todo) => todo.id));
+    if (!deletedIds) {
+      // 失敗したら元に戻す
+      setTodos((prev) => [...prev, ...monthTodos]);
+      alert("月のTodo削除に失敗しました");
+      return;
+    }
+
+    const deletedIdSet = new Set(deletedIds);
+    const notDeletedTodos = monthTodos.filter((todo) => !deletedIdSet.has(todo.id));
+    if (notDeletedTodos.length > 0) {
+      setTodos((prev) => [...prev, ...notDeletedTodos]);
+    }
+
+    const deletedTodosWithImages = todosWithImages.filter((todo) => deletedIdSet.has(todo.id));
+    const deletedImageCount = deletedTodosWithImages.reduce(
+      (sum, todo) => sum + (todo.imageUrls?.length || 0),
+      0
+    );
+
+    // DBで削除できたTodoの画像だけR2から削除する
+    if (deletedImageCount > 0) {
+      console.log(`🗑️ 月の削除に伴い、${deletedImageCount}枚の画像をR2から削除中...`);
+      for (const todo of deletedTodosWithImages) {
         if (todo.imageUrls && todo.imageUrls.length > 0) {
           for (const imageKey of todo.imageUrls) {
             try {
@@ -494,15 +498,7 @@ const App: React.FC = () => {
       }
     }
 
-    // Supabaseで一括削除
-    const success = await deleteMonthTodos(year, month);
-    if (!success) {
-      // 失敗したら元に戻す
-      setTodos((prev) => [...prev, ...monthTodos]);
-      alert("月のTodo削除に失敗しました");
-    } else {
-      console.log("✅ 月のTodo削除完了");
-    }
+    console.log("✅ 月のTodo削除完了");
   };
 
   // Filter todos for selected date (use local timezone)

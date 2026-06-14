@@ -33,11 +33,20 @@ export async function setDateColor(
   try {
     if (color === null) {
       // 色を解除するとき、ラベルが残っていればレコードを残す
-      const { data } = await supabase
+      const { data, error: lookupError } = await supabase
         .from("date_colors")
         .select("label")
         .eq("date_str", dateStr)
-        .single();
+        .maybeSingle();
+
+      if (lookupError) {
+        console.error("DateColor確認エラー:", lookupError);
+        return false;
+      }
+
+      if (!data) {
+        return true;
+      }
 
       if (data?.label) {
         const { error } = await supabase
@@ -95,11 +104,20 @@ export async function setDateLabel(
   try {
     if (!label || label.trim() === "") {
       // ラベルを消すとき、色も無ければレコード削除
-      const { data } = await supabase
+      const { data, error: lookupError } = await supabase
         .from("date_colors")
         .select("color")
         .eq("date_str", dateStr)
-        .single();
+        .maybeSingle();
+
+      if (lookupError) {
+        console.error("DateLabel確認エラー:", lookupError);
+        return false;
+      }
+
+      if (!data) {
+        return true;
+      }
 
       if (data?.color) {
         const { error } = await supabase

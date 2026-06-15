@@ -35,6 +35,14 @@
 # .env.local
 VITE_SUPABASE_URL=your_supabase_project_url
 VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
+
+# R2設定（Vercelなどのサーバー環境変数に設定。VITE_は付けない）
+R2_ACCOUNT_ID=your_cloudflare_account_id
+R2_ACCESS_KEY_ID=your_r2_access_key_id
+R2_SECRET_ACCESS_KEY=your_r2_secret_access_key
+R2_BUCKET_NAME=your_r2_bucket_name
+# 任意: 未設定の場合は https://<R2_ACCOUNT_ID>.r2.cloudflarestorage.com
+R2_ENDPOINT=your_r2_endpoint
 ```
 
 ### ステップ 2: 管理者ユーザーの作成
@@ -76,6 +84,7 @@ npm run dev
 ## 🔒 セキュリティチェックリスト
 
 - [x] API キーを環境変数に移行
+- [x] R2 秘密鍵はサーバー環境変数のみで管理（`VITE_`を付けない）
 - [x] `.env.local`が`.gitignore`に追加済み
 - [x] Supabase Auth 認証の実装
 - [x] RLS ポリシーの厳格化
@@ -124,6 +133,7 @@ npm run dev
 2. **環境変数の設定**
 
    - Vercel/Netlify などのホスティングサービスで環境変数を設定
+   - R2 の Access Key / Secret はクライアントに公開される `VITE_` プレフィックスを付けない
 
 3. **メール確認の有効化**
 

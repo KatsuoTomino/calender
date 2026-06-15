@@ -1,4 +1,4 @@
-import { TodoItem } from "../types";
+import type { TodoItem } from "../types";
 
 const DATE_STR_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 

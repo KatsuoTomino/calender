@@ -1,4 +1,4 @@
-import { DateColor, DateColorType } from "../types";
+import type { DateColor, DateColorType } from "../types";
 
 export function applyOptimisticDateColor(
   dateColors: DateColor[],

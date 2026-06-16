@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { applyOptimisticDateColor, applyOptimisticDateLabel } from "../utils/dateColors.ts";
 import { extractR2Key, isAllowedR2Key, buildAvatarKey } from "../utils/r2Keys.ts";
 import { getMonthDateRange, isTodoInMonth } from "../utils/todoDates.ts";
-import { DateColor } from "../types.ts";
+import type { DateColor } from "../types.ts";
 
 test("clearing a date color preserves an existing label in optimistic state", () => {
   const existing: DateColor[] = [

@@ -6,7 +6,7 @@ import {
   addTodo,
   toggleTodo,
   deleteTodo,
-  deleteMonthTodos,
+  deleteTodosByIds,
   subscribeTodoChanges,
   updateTodoImages,
 } from "./services/todoService";
@@ -20,6 +20,9 @@ import { fetchDateColors, setDateColor, setDateLabel, subscribeDateColorChanges 
 import Login from "./components/Login";
 import Calendar from "./components/Calendar";
 import TodoList from "./components/TodoList";
+import { applyOptimisticDateColor, applyOptimisticDateLabel } from "./utils/dateColors";
+import { R2_AVATAR_EXTENSIONS, buildAvatarKey, extractR2Key } from "./utils/r2Keys";
+import { isTodoInMonth } from "./utils/todoDates";
 
 const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
@@ -82,6 +85,7 @@ const App: React.FC = () => {
       } else {
         setUser(null);
         setTodos([]);
+        setDateColors([]);
         setAvatarImageUrl(null);
       }
     });
@@ -188,26 +192,6 @@ const App: React.FC = () => {
     }
 
     try {
-      console.log("🔄 古いアバター画像を削除中...");
-      // 古いアバター画像を削除（複数の拡張子を試す）
-      const extensions = ['jpg', 'jpeg', 'png', 'webp', 'gif'];
-      for (const ext of extensions) {
-        const oldAvatarKey = `users/${user.id}/avatar.${ext}`;
-        try {
-          await deleteImageFromR2(oldAvatarKey);
-        } catch (error) {
-          // 404エラーは無視（存在しないファイル）
-        }
-      }
-      // 後方互換性: localStorageに保存されているキーも削除を試みる
-      if (user.avatarImageUrl) {
-        try {
-          await deleteImageFromR2(user.avatarImageUrl);
-        } catch (error) {
-          // エラーは無視
-        }
-      }
-
       console.log("📤 R2にアップロード中...");
       // R2にアップロード
       const uploadedKey = await uploadAvatarToR2(file, user.id);
@@ -227,6 +211,23 @@ const App: React.FC = () => {
       setUser(updatedUser);
       saveUser(updatedUser);
       console.log("💾 ユーザー情報をlocalStorageに保存しました（後方互換性）");
+
+      const oldAvatarKeys = new Set<string>();
+      for (const ext of R2_AVATAR_EXTENSIONS) {
+        const oldAvatarKey = buildAvatarKey(user.id, ext);
+        if (oldAvatarKey !== uploadedKey) {
+          oldAvatarKeys.add(oldAvatarKey);
+        }
+      }
+      if (user.avatarImageUrl) {
+        const storedKey = extractR2Key(user.avatarImageUrl);
+        if (storedKey !== uploadedKey) {
+          oldAvatarKeys.add(storedKey);
+        }
+      }
+      Promise.allSettled([...oldAvatarKeys].map((oldKey) => deleteImageFromR2(oldKey))).then(
+        () => console.log("✅ 古いアバター画像のクリーンアップ完了")
+      );
 
       // R2から直接取得して表示（他の端末でも動作する）
       console.log("🖼️ R2からアバター画像を取得中... userId:", user.id);
@@ -291,16 +292,7 @@ const App: React.FC = () => {
 
     // 楽観的更新
     setDateColors((prev) => {
-      const existing = prev.find((dc) => dc.dateStr === dateStr);
-      if (color === null) {
-        return prev.filter((dc) => dc.dateStr !== dateStr);
-      }
-      if (existing) {
-        return prev.map((dc) =>
-          dc.dateStr === dateStr ? { ...dc, color } : dc
-        );
-      }
-      return [...prev, { id: crypto.randomUUID(), dateStr, color, createdBy: user.id }];
+      return applyOptimisticDateColor(prev, dateStr, color, user.id, () => crypto.randomUUID());
     });
 
     const success = await setDateColor(dateStr, color, user.id);
@@ -313,18 +305,7 @@ const App: React.FC = () => {
     if (!user) return;
 
     setDateColors((prev) => {
-      const existing = prev.find((dc) => dc.dateStr === dateStr);
-      const trimmed = label?.trim() || null;
-      if (existing) {
-        if (!trimmed && !existing.color) {
-          return prev.filter((dc) => dc.dateStr !== dateStr);
-        }
-        return prev.map((dc) =>
-          dc.dateStr === dateStr ? { ...dc, label: trimmed } : dc
-        );
-      }
-      if (!trimmed) return prev;
-      return [...prev, { id: crypto.randomUUID(), dateStr, color: null, label: trimmed, createdBy: user.id }];
+      return applyOptimisticDateLabel(prev, dateStr, label, user.id, () => crypto.randomUUID());
     });
 
     const success = await setDateLabel(dateStr, label, user.id);
@@ -343,6 +324,8 @@ const App: React.FC = () => {
     localStorage.removeItem("kizuna_user");
     setUser(null);
     setTodos([]);
+    setDateColors([]);
+    setAvatarImageUrl(null);
   };
 
   const handleMonthChange = (offset: number) => {
@@ -401,7 +384,7 @@ const App: React.FC = () => {
     }
   };
 
-  const handleDeleteTodo = async (id: string) => {
+  const handleDeleteTodo = async (id: string): Promise<boolean> => {
     // 楽観的更新
     const deletedTodo = todos.find((t) => t.id === id);
     setTodos((prev) => prev.filter((t) => t.id !== id));
@@ -413,9 +396,10 @@ const App: React.FC = () => {
       setTodos((prev) => [...prev, deletedTodo]);
       alert("Todoの削除に失敗しました");
     }
+    return success;
   };
 
-  const handleUpdateTodoImages = async (id: string, imageUrls: string[] | null) => {
+  const handleUpdateTodoImages = async (id: string, imageUrls: string[] | null): Promise<boolean> => {
     // 楽観的更新
     const originalTodo = todos.find((t) => t.id === id);
     setTodos((prev) =>
@@ -431,19 +415,14 @@ const App: React.FC = () => {
       );
       alert("画像の更新に失敗しました");
     }
+    return success;
   };
 
   const handleDeleteMonthTodos = async () => {
     const year = currentDate.getFullYear();
     const month = currentDate.getMonth() + 1;
 
-    const monthTodos = todos.filter((todo) => {
-      const todoDate = new Date(todo.dateStr);
-      return (
-        todoDate.getFullYear() === year &&
-        todoDate.getMonth() === currentDate.getMonth()
-      );
-    });
+    const monthTodos = todos.filter((todo) => isTodoInMonth(todo.dateStr, year, month));
 
     if (monthTodos.length === 0) {
       alert(`${year}年${month}月のTodoはありません`);
@@ -473,12 +452,29 @@ const App: React.FC = () => {
       prev.filter((t) => !monthTodos.find((mt) => mt.id === t.id))
     );
 
-    // R2から画像を削除
-    if (totalImages > 0) {
-      console.log(`🗑️ 月の削除に伴い、${totalImages}枚の画像をR2から削除中...`);
-      for (const todo of todosWithImages) {
-        if (todo.imageUrls && todo.imageUrls.length > 0) {
-          for (const imageKey of todo.imageUrls) {
+    // Supabaseで確認済みのIDだけを一括削除
+    const deletedIds = await deleteTodosByIds(monthTodos.map((todo) => todo.id));
+    if (!deletedIds) {
+      // 失敗したら元に戻す
+      setTodos((prev) => [...prev, ...monthTodos]);
+      alert("月のTodo削除に失敗しました");
+    } else {
+      const deletedIdSet = new Set(deletedIds);
+      const failedTodos = monthTodos.filter((todo) => !deletedIdSet.has(todo.id));
+      if (failedTodos.length > 0) {
+        setTodos((prev) => [...prev, ...failedTodos]);
+        alert(`${failedTodos.length}件のTodoを削除できませんでした`);
+      }
+
+      const deletedTodosWithImages = todosWithImages.filter((todo) => deletedIdSet.has(todo.id));
+      const deletedImageCount = deletedTodosWithImages.reduce(
+        (sum, todo) => sum + (todo.imageUrls?.length || 0),
+        0
+      );
+      if (deletedImageCount > 0) {
+        console.log(`🗑️ 月の削除に伴い、${deletedImageCount}枚の画像をR2から削除中...`);
+        for (const todo of deletedTodosWithImages) {
+          for (const imageKey of todo.imageUrls || []) {
             try {
               const deleted = await deleteImageFromR2(imageKey);
               if (deleted) {
@@ -492,15 +488,6 @@ const App: React.FC = () => {
           }
         }
       }
-    }
-
-    // Supabaseで一括削除
-    const success = await deleteMonthTodos(year, month);
-    if (!success) {
-      // 失敗したら元に戻す
-      setTodos((prev) => [...prev, ...monthTodos]);
-      alert("月のTodo削除に失敗しました");
-    } else {
       console.log("✅ 月のTodo削除完了");
     }
   };

@@ -7,6 +7,7 @@
 - ✅ Vercel アカウント（無料で作成可能）
 - ✅ GitHub リポジトリ（既に準備済み）
 - ✅ Supabase 環境変数（URL、Anon Key）
+- ✅ Cloudflare R2 環境変数（画像保存用）
 
 ### 2. 環境変数の確認
 
@@ -15,6 +16,11 @@
 ```
 VITE_SUPABASE_URL=your_supabase_project_url
 VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
+R2_ACCOUNT_ID=your_cloudflare_account_id
+R2_ACCESS_KEY_ID=your_r2_access_key_id
+R2_SECRET_ACCESS_KEY=your_r2_secret_access_key
+R2_BUCKET_NAME=your_r2_bucket_name
+# 任意: R2_ENDPOINT=https://<account-id>.r2.cloudflarestorage.com
 ```
 
 ---
@@ -53,13 +59,20 @@ VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
 | ------------------------ | ---------------------------------- |
 | `VITE_SUPABASE_URL`      | あなたの Supabase プロジェクト URL |
 | `VITE_SUPABASE_ANON_KEY` | あなたの Supabase Anon Key         |
+| `R2_ACCOUNT_ID`          | Cloudflare アカウント ID           |
+| `R2_ACCESS_KEY_ID`       | R2 Access Key ID                   |
+| `R2_SECRET_ACCESS_KEY`   | R2 Secret Access Key               |
+| `R2_BUCKET_NAME`         | R2 バケット名                      |
+| `R2_ENDPOINT`            | 任意: R2 S3 API エンドポイント     |
 
 **追加方法：**
 
 1. **Key**欄に`VITE_SUPABASE_URL`を入力
 2. **Value**欄に Supabase URL を貼り付け
 3. **Add**をクリック
-4. 同様に`VITE_SUPABASE_ANON_KEY`を追加
+4. 同様に`VITE_SUPABASE_ANON_KEY`と`R2_*`を追加
+
+R2のアクセスキーとシークレットには`VITE_`を付けないでください。Viteでは`VITE_*`環境変数がブラウザ向けバンドルに公開されます。
 
 ### ステップ 4: デプロイ実行
 
@@ -122,7 +135,7 @@ Supabase ダッシュボードで以下を確認：
 
 1. Vercel ダッシュボード → プロジェクトを選択
 2. **Settings** → **Environment Variables**
-3. 変数名が`VITE_`で始まっているか確認
+3. Supabaseの公開設定は`VITE_`で始まり、R2の秘密情報は`R2_`で始まっているか確認
 4. 値が正しく設定されているか確認
 5. 再デプロイ（**Deployments** → 最新デプロイの右側メニュー → **Redeploy**）
 

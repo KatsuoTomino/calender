@@ -1,4 +1,4 @@
-import { TodoItem } from "../types";
+import type { TodoItem } from "../types";
 
 export function monthBounds(year: number, month: number): { start: string; end: string } {
   const start = `${year}-${String(month).padStart(2, "0")}-01`;

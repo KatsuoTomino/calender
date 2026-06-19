@@ -35,6 +35,12 @@
 # .env.local
 VITE_SUPABASE_URL=your_supabase_project_url
 VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
+
+# Cloudflare R2（サーバー専用。VITE_を付けない）
+R2_ACCOUNT_ID=your_cloudflare_account_id
+R2_ACCESS_KEY_ID=your_r2_access_key_id
+R2_SECRET_ACCESS_KEY=your_r2_secret_access_key
+R2_BUCKET_NAME=your_r2_bucket_name
 ```
 
 ### ステップ 2: 管理者ユーザーの作成
@@ -124,6 +130,7 @@ npm run dev
 2. **環境変数の設定**
 
    - Vercel/Netlify などのホスティングサービスで環境変数を設定
+   - R2 のシークレットは `R2_*` として設定し、ブラウザへ露出する `VITE_` を付けない
 
 3. **メール確認の有効化**
 

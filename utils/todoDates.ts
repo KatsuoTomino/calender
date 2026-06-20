@@ -1,5 +1,3 @@
-import type { TodoItem } from "../types";
-
 export function getMonthDateRange(year: number, month: number): {
   startDateStr: string;
   endDateStr: string;
@@ -15,7 +13,7 @@ export function isTodoInMonth(dateStr: string, year: number, month: number): boo
   return dateStr >= startDateStr && dateStr <= endDateStr;
 }
 
-export function filterTodosInMonth<T extends Pick<TodoItem, "dateStr">>(
+export function filterTodosInMonth<T extends { dateStr: string }>(
   todos: T[],
   year: number,
   month: number

@@ -420,7 +420,7 @@ const App: React.FC = () => {
     const year = currentDate.getFullYear();
     const month = currentDate.getMonth() + 1;
 
-    const monthTodos = filterTodosInMonth(todos, year, month);
+    const monthTodos = filterTodosInMonth<TodoItem>(todos, year, month);
 
     if (monthTodos.length === 0) {
       alert(`${year}年${month}月のTodoはありません`);

@@ -34,6 +34,14 @@
 # Supabase設定
 VITE_SUPABASE_URL=your_supabase_url
 VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
+
+# Cloudflare R2設定（サーバー側のみ）
+R2_ACCOUNT_ID=your_cloudflare_account_id
+R2_ACCESS_KEY_ID=your_r2_access_key_id
+R2_SECRET_ACCESS_KEY=your_r2_secret_access_key
+R2_BUCKET_NAME=your_r2_bucket_name
+# 任意
+R2_ENDPOINT=your_r2_endpoint
 ```
 
 ### 2. 管理者ユーザーの作成
@@ -74,6 +82,7 @@ SELECT * FROM pg_policies WHERE tablename = 'users';
 ### APIキーの管理
 - **NEVER** APIキーをGitにコミットしない
 - 本番環境では環境変数を使用
+- R2 のアクセスキー/シークレットは `R2_*` としてVercel Function側にだけ設定し、ブラウザへ露出する `VITE_*` にはしない
 - 定期的にキーをローテーション
 
 ### セッション管理

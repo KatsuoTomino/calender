@@ -43,8 +43,13 @@ async function callR2Api<T>(
     | R2ApiResponse<T>
     | null;
 
-  if (!response.ok || !result?.success) {
-    console.error("R2 APIエラー:", result?.error || response.statusText);
+  if (!response.ok || !result) {
+    console.error("R2 APIエラー:", response.statusText);
+    return null;
+  }
+
+  if (!result.success) {
+    console.error("R2 APIエラー:", result.error || response.statusText);
     return null;
   }
 

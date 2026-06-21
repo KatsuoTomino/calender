@@ -7,6 +7,7 @@
 - ✅ Vercel アカウント（無料で作成可能）
 - ✅ GitHub リポジトリ（既に準備済み）
 - ✅ Supabase 環境変数（URL、Anon Key）
+- ✅ Cloudflare R2 環境変数（画像アップロード用）
 
 ### 2. 環境変数の確認
 
@@ -15,6 +16,12 @@
 ```
 VITE_SUPABASE_URL=your_supabase_project_url
 VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
+R2_ACCOUNT_ID=your_cloudflare_account_id
+R2_ACCESS_KEY_ID=your_r2_access_key_id
+R2_SECRET_ACCESS_KEY=your_r2_secret_access_key
+R2_BUCKET_NAME=your_r2_bucket_name
+# 任意: 未設定の場合は https://<R2_ACCOUNT_ID>.r2.cloudflarestorage.com を使用
+R2_ENDPOINT=your_r2_endpoint
 ```
 
 ---
@@ -53,13 +60,21 @@ VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
 | ------------------------ | ---------------------------------- |
 | `VITE_SUPABASE_URL`      | あなたの Supabase プロジェクト URL |
 | `VITE_SUPABASE_ANON_KEY` | あなたの Supabase Anon Key         |
+| `R2_ACCOUNT_ID`          | Cloudflare Account ID              |
+| `R2_ACCESS_KEY_ID`       | R2 API Token の Access Key ID      |
+| `R2_SECRET_ACCESS_KEY`   | R2 API Token の Secret Access Key  |
+| `R2_BUCKET_NAME`         | R2 バケット名                      |
+| `R2_ENDPOINT`            | R2 S3 API エンドポイント（任意）   |
+
+> R2 の秘密情報には `VITE_` プレフィックスを付けないでください。
+> Vite 公式ドキュメントの通り、`VITE_*` はクライアント bundle に公開されます。
 
 **追加方法：**
 
 1. **Key**欄に`VITE_SUPABASE_URL`を入力
 2. **Value**欄に Supabase URL を貼り付け
 3. **Add**をクリック
-4. 同様に`VITE_SUPABASE_ANON_KEY`を追加
+4. 同様に`VITE_SUPABASE_ANON_KEY`と R2 用の環境変数を追加
 
 ### ステップ 4: デプロイ実行
 

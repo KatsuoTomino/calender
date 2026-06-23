@@ -85,16 +85,22 @@ export async function toggleTodo(
   completed: boolean
 ): Promise<boolean> {
   try {
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from("todos")
       .update({
         completed,
         updated_at: new Date().toISOString(),
       })
-      .eq("id", id);
+      .eq("id", id)
+      .select("id")
+      .maybeSingle();
 
     if (error) {
       console.error("Todoの更新エラー:", error);
+      return false;
+    }
+    if (!data) {
+      console.error("Todoの更新対象が見つかりません:", id);
       return false;
     }
 
@@ -123,13 +129,19 @@ export async function updateTodoImages(
       updateData.image_url = JSON.stringify(imageUrls);
     }
 
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from("todos")
       .update(updateData)
-      .eq("id", id);
+      .eq("id", id)
+      .select("id")
+      .maybeSingle();
 
     if (error) {
       console.error("Todo画像の更新エラー:", error);
+      return false;
+    }
+    if (!data) {
+      console.error("Todo画像の更新対象が見つかりません:", id);
       return false;
     }
 
@@ -143,10 +155,19 @@ export async function updateTodoImages(
 // Todoを削除
 export async function deleteTodo(id: string): Promise<boolean> {
   try {
-    const { error } = await supabase.from("todos").delete().eq("id", id);
+    const { data, error } = await supabase
+      .from("todos")
+      .delete()
+      .eq("id", id)
+      .select("id")
+      .maybeSingle();
 
     if (error) {
       console.error("Todoの削除エラー:", error);
+      return false;
+    }
+    if (!data) {
+      console.error("Todoの削除対象が見つかりません:", id);
       return false;
     }
 
@@ -157,46 +178,32 @@ export async function deleteTodo(id: string): Promise<boolean> {
   }
 }
 
-// 月のTodoを一括削除
-export async function deleteMonthTodos(
-  year: number,
-  month: number
-): Promise<boolean> {
+// 指定されたTodoだけを一括削除
+export async function deleteTodosByIds(ids: string[]): Promise<boolean> {
   try {
-    // Helper to format date as YYYY-MM-DD in local timezone
-    const formatLocalDate = (date: Date): string => {
-      const y = date.getFullYear();
-      const m = String(date.getMonth() + 1).padStart(2, "0");
-      const d = String(date.getDate()).padStart(2, "0");
-      return `${y}-${m}-${d}`;
-    };
+    if (ids.length === 0) return true;
 
-    // 月の最初の日と最後の日を計算
-    const startDate = new Date(year, month - 1, 1); // month は 1-12
-    const endDate = new Date(year, month, 0); // 月の最後の日
-
-    const startDateStr = formatLocalDate(startDate);
-    const endDateStr = formatLocalDate(endDate);
-
-    console.log(
-      `🗑️ ${year}年${month}月のTodoを削除中... (${startDateStr} ~ ${endDateStr})`
-    );
-
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from("todos")
       .delete()
-      .gte("date_str", startDateStr)
-      .lte("date_str", endDateStr);
+      .in("id", ids)
+      .select("id");
 
     if (error) {
-      console.error("❌ 月のTodo削除エラー:", error);
+      console.error("Todo一括削除エラー:", error);
+      return false;
+    }
+    if ((data || []).length !== ids.length) {
+      console.error("Todo一括削除の件数が一致しません:", {
+        expected: ids.length,
+        deleted: (data || []).length,
+      });
       return false;
     }
 
-    console.log("✅ 月のTodo削除成功");
     return true;
   } catch (err) {
-    console.error("❌ 予期しないエラー:", err);
+    console.error("予期しないエラー:", err);
     return false;
   }
 }

@@ -37,6 +37,18 @@ VITE_SUPABASE_URL=your_supabase_project_url
 VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
 ```
 
+画像アップロードを使う本番環境では、Vercel のサーバー環境変数に以下も設定してください。
+`R2_SECRET_ACCESS_KEY` などの R2 認証情報は Vite の `VITE_` 接頭辞を付けないでください。
+Vite 公式ドキュメントの通り、`VITE_*` はクライアントバンドルへ露出します。
+
+```bash
+R2_ACCOUNT_ID=your_cloudflare_account_id
+R2_ACCESS_KEY_ID=your_r2_access_key_id
+R2_SECRET_ACCESS_KEY=your_r2_secret_access_key
+R2_BUCKET_NAME=your_r2_bucket_name
+# 任意: R2_ENDPOINT=https://your_account_id.r2.cloudflarestorage.com
+```
+
 ### ステップ 2: 管理者ユーザーの作成
 
 以下のいずれかの方法で管理者ユーザーを作成してください：
@@ -124,6 +136,7 @@ npm run dev
 2. **環境変数の設定**
 
    - Vercel/Netlify などのホスティングサービスで環境変数を設定
+   - R2 の秘密情報はサーバー専用変数（`R2_*`）で設定し、`VITE_R2_*` は使用しない
 
 3. **メール確認の有効化**
 

@@ -36,6 +36,18 @@ VITE_SUPABASE_URL=your_supabase_url
 VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
 ```
 
+Cloudflare R2 を利用する場合、Vercel のサーバー環境変数に以下を設定:
+
+```bash
+R2_ACCOUNT_ID=your_cloudflare_account_id
+R2_ACCESS_KEY_ID=your_r2_access_key_id
+R2_SECRET_ACCESS_KEY=your_r2_secret_access_key
+R2_BUCKET_NAME=your_r2_bucket_name
+# 任意: R2_ENDPOINT=https://your_account_id.r2.cloudflarestorage.com
+```
+
+`VITE_R2_*` は使用しないでください。Vite の `VITE_*` 変数はビルド済み JavaScript に含まれるため、R2 の書き込み/削除権限を持つキーが漏えいします。
+
 ### 2. 管理者ユーザーの作成
 
 #### 方法A: Supabaseダッシュボード（推奨）
@@ -74,6 +86,7 @@ SELECT * FROM pg_policies WHERE tablename = 'users';
 ### APIキーの管理
 - **NEVER** APIキーをGitにコミットしない
 - 本番環境では環境変数を使用
+- ブラウザで使う `VITE_*` 変数に秘密情報を入れない
 - 定期的にキーをローテーション
 
 ### セッション管理

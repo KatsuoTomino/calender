@@ -123,17 +123,18 @@ export async function updateTodoImages(
       updateData.image_url = JSON.stringify(imageUrls);
     }
 
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from("todos")
       .update(updateData)
-      .eq("id", id);
+      .eq("id", id)
+      .select("id");
 
     if (error) {
       console.error("Todo画像の更新エラー:", error);
       return false;
     }
 
-    return true;
+    return (data || []).length === 1;
   } catch (err) {
     console.error("予期しないエラー:", err);
     return false;
@@ -143,17 +144,44 @@ export async function updateTodoImages(
 // Todoを削除
 export async function deleteTodo(id: string): Promise<boolean> {
   try {
-    const { error } = await supabase.from("todos").delete().eq("id", id);
+    const { data, error } = await supabase
+      .from("todos")
+      .delete()
+      .eq("id", id)
+      .select("id");
 
     if (error) {
       console.error("Todoの削除エラー:", error);
       return false;
     }
 
-    return true;
+    return (data || []).length === 1;
   } catch (err) {
     console.error("予期しないエラー:", err);
     return false;
+  }
+}
+
+// 指定したTodo IDを一括削除し、実際に削除されたIDを返す
+export async function deleteTodosByIds(ids: string[]): Promise<string[] | null> {
+  if (ids.length === 0) return [];
+
+  try {
+    const { data, error } = await supabase
+      .from("todos")
+      .delete()
+      .in("id", ids)
+      .select("id");
+
+    if (error) {
+      console.error("Todo一括削除エラー:", error);
+      return null;
+    }
+
+    return (data || []).map((todo) => todo.id);
+  } catch (err) {
+    console.error("予期しないエラー:", err);
+    return null;
   }
 }
 

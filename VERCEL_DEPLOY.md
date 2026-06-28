@@ -53,6 +53,11 @@ VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
 | ------------------------ | ---------------------------------- |
 | `VITE_SUPABASE_URL`      | あなたの Supabase プロジェクト URL |
 | `VITE_SUPABASE_ANON_KEY` | あなたの Supabase Anon Key         |
+| `R2_ACCOUNT_ID`          | Cloudflare R2 アカウント ID        |
+| `R2_ACCESS_KEY_ID`       | Cloudflare R2 アクセスキー ID      |
+| `R2_SECRET_ACCESS_KEY`   | Cloudflare R2 シークレットキー     |
+| `R2_BUCKET_NAME`         | Cloudflare R2 バケット名           |
+| `R2_ENDPOINT`            | R2 S3 API エンドポイント（任意）   |
 
 **追加方法：**
 
@@ -60,6 +65,7 @@ VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
 2. **Value**欄に Supabase URL を貼り付け
 3. **Add**をクリック
 4. 同様に`VITE_SUPABASE_ANON_KEY`を追加
+5. 画像アップロード機能を使う場合は、`VITE_`を付けずに`R2_*`環境変数を追加
 
 ### ステップ 4: デプロイ実行
 
@@ -122,7 +128,7 @@ Supabase ダッシュボードで以下を確認：
 
 1. Vercel ダッシュボード → プロジェクトを選択
 2. **Settings** → **Environment Variables**
-3. 変数名が`VITE_`で始まっているか確認
+3. Supabase のクライアント変数は`VITE_`で始まり、R2 の秘密情報は`VITE_`で始まっていないことを確認
 4. 値が正しく設定されているか確認
 5. 再デプロイ（**Deployments** → 最新デプロイの右側メニュー → **Redeploy**）
 

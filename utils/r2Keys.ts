@@ -11,6 +11,7 @@ export function sanitizeImageExtension(fileName: string, fallback = "jpg"): stri
 export function normalizeR2Key(input: string, bucketName?: string): string | null {
   const trimmed = input.trim();
   if (!trimmed) return null;
+  if (trimmed.includes("..") || /%2e/i.test(trimmed)) return null;
 
   let key = trimmed;
   if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {

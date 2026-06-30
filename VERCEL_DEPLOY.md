@@ -53,6 +53,13 @@ VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
 | ------------------------ | ---------------------------------- |
 | `VITE_SUPABASE_URL`      | あなたの Supabase プロジェクト URL |
 | `VITE_SUPABASE_ANON_KEY` | あなたの Supabase Anon Key         |
+| `R2_ACCOUNT_ID`          | Cloudflare R2 Account ID           |
+| `R2_ACCESS_KEY_ID`       | Cloudflare R2 Access Key ID        |
+| `R2_SECRET_ACCESS_KEY`   | Cloudflare R2 Secret Access Key    |
+| `R2_BUCKET_NAME`         | Cloudflare R2 Bucket Name          |
+| `R2_ENDPOINT`            | 任意: R2 endpoint URL              |
+
+R2 の値はサーバー専用です。Vite 公式ドキュメントの通り `VITE_*` はブラウザバンドルへ公開されるため、R2 の Access Key / Secret には `VITE_` プレフィックスを付けないでください。
 
 **追加方法：**
 
@@ -122,7 +129,7 @@ Supabase ダッシュボードで以下を確認：
 
 1. Vercel ダッシュボード → プロジェクトを選択
 2. **Settings** → **Environment Variables**
-3. 変数名が`VITE_`で始まっているか確認
+3. Supabase の公開値は`VITE_`、R2 の秘密値は`R2_`で始まっているか確認
 4. 値が正しく設定されているか確認
 5. 再デプロイ（**Deployments** → 最新デプロイの右側メニュー → **Redeploy**）
 

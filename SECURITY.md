@@ -75,6 +75,8 @@ SELECT * FROM pg_policies WHERE tablename = 'users';
 - **NEVER** APIキーをGitにコミットしない
 - 本番環境では環境変数を使用
 - 定期的にキーをローテーション
+- R2 の Access Key / Secret は `R2_*` のサーバー専用環境変数に設定する
+- `VITE_*` は Vite によりブラウザへ公開されるため、秘密情報には使用しない
 
 ### セッション管理
 - セッションは自動的にSupabaseが管理

@@ -33,11 +33,19 @@ export async function setDateColor(
   try {
     if (color === null) {
       // 色を解除するとき、ラベルが残っていればレコードを残す
-      const { data } = await supabase
+      // Supabase maybeSingle() is the documented zero-or-one row modifier; still
+      // check unexpected errors before deleting to avoid losing an existing label.
+      // https://supabase.com/docs/reference/javascript/using-modifiers-maybesingle
+      const { data, error: fetchError } = await supabase
         .from("date_colors")
         .select("label")
         .eq("date_str", dateStr)
-        .single();
+        .maybeSingle();
+
+      if (fetchError) {
+        console.error("DateColor取得エラー:", fetchError);
+        return false;
+      }
 
       if (data?.label) {
         const { error } = await supabase
@@ -95,11 +103,19 @@ export async function setDateLabel(
   try {
     if (!label || label.trim() === "") {
       // ラベルを消すとき、色も無ければレコード削除
-      const { data } = await supabase
+      // Supabase maybeSingle() is the documented zero-or-one row modifier; still
+      // check unexpected errors before deleting to avoid losing an existing color.
+      // https://supabase.com/docs/reference/javascript/using-modifiers-maybesingle
+      const { data, error: fetchError } = await supabase
         .from("date_colors")
         .select("color")
         .eq("date_str", dateStr)
-        .single();
+        .maybeSingle();
+
+      if (fetchError) {
+        console.error("DateLabel取得エラー:", fetchError);
+        return false;
+      }
 
       if (data?.color) {
         const { error } = await supabase

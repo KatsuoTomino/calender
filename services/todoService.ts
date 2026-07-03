@@ -157,47 +157,30 @@ export async function deleteTodo(id: string): Promise<boolean> {
   }
 }
 
-// 月のTodoを一括削除
-export async function deleteMonthTodos(
-  year: number,
-  month: number
-): Promise<boolean> {
+// 月のTodoを一括削除（確認済みIDだけを削除）
+export async function deleteMonthTodos(todoIds: string[]): Promise<string[] | null> {
   try {
-    // Helper to format date as YYYY-MM-DD in local timezone
-    const formatLocalDate = (date: Date): string => {
-      const y = date.getFullYear();
-      const m = String(date.getMonth() + 1).padStart(2, "0");
-      const d = String(date.getDate()).padStart(2, "0");
-      return `${y}-${m}-${d}`;
-    };
+    if (todoIds.length === 0) return [];
 
-    // 月の最初の日と最後の日を計算
-    const startDate = new Date(year, month - 1, 1); // month は 1-12
-    const endDate = new Date(year, month, 0); // 月の最後の日
+    console.log(`🗑️ 月のTodoを削除中... (${todoIds.length}件)`);
 
-    const startDateStr = formatLocalDate(startDate);
-    const endDateStr = formatLocalDate(endDate);
-
-    console.log(
-      `🗑️ ${year}年${month}月のTodoを削除中... (${startDateStr} ~ ${endDateStr})`
-    );
-
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from("todos")
       .delete()
-      .gte("date_str", startDateStr)
-      .lte("date_str", endDateStr);
+      .in("id", todoIds)
+      .select("id");
 
     if (error) {
       console.error("❌ 月のTodo削除エラー:", error);
-      return false;
+      return null;
     }
 
-    console.log("✅ 月のTodo削除成功");
-    return true;
+    const deletedIds = (data || []).map((todo) => todo.id as string);
+    console.log("✅ 月のTodo削除成功:", deletedIds.length);
+    return deletedIds;
   } catch (err) {
     console.error("❌ 予期しないエラー:", err);
-    return false;
+    return null;
   }
 }
 

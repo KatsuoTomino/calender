@@ -15,6 +15,11 @@
 ```
 VITE_SUPABASE_URL=your_supabase_project_url
 VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
+R2_ACCOUNT_ID=your_cloudflare_account_id
+R2_ACCESS_KEY_ID=your_r2_access_key_id
+R2_SECRET_ACCESS_KEY=your_r2_secret_access_key
+R2_BUCKET_NAME=your_r2_bucket_name
+# 任意: R2_ENDPOINT=https://your_account_id.r2.cloudflarestorage.com
 ```
 
 ---
@@ -53,6 +58,13 @@ VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
 | ------------------------ | ---------------------------------- |
 | `VITE_SUPABASE_URL`      | あなたの Supabase プロジェクト URL |
 | `VITE_SUPABASE_ANON_KEY` | あなたの Supabase Anon Key         |
+| `R2_ACCOUNT_ID`          | Cloudflare Account ID              |
+| `R2_ACCESS_KEY_ID`       | R2 API Token の Access Key ID      |
+| `R2_SECRET_ACCESS_KEY`   | R2 API Token の Secret Access Key  |
+| `R2_BUCKET_NAME`         | R2 バケット名                      |
+| `R2_ENDPOINT`            | 任意: カスタム R2 エンドポイント   |
+
+R2の認証情報には `VITE_` を付けないでください。`VITE_*` 変数はViteの仕様でブラウザバンドルに公開されます。
 
 **追加方法：**
 

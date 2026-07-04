@@ -1,6 +1,31 @@
 import { supabase } from "./supabaseClient";
 import { TodoItem } from "../types";
 
+function mapTodoRow(todo: any): TodoItem {
+  let imageUrls: string[] | undefined = undefined;
+  if (todo.image_url) {
+    if (typeof todo.image_url === "string") {
+      try {
+        const parsed = JSON.parse(todo.image_url);
+        imageUrls = Array.isArray(parsed) ? parsed : [todo.image_url];
+      } catch {
+        imageUrls = [todo.image_url];
+      }
+    } else if (Array.isArray(todo.image_url)) {
+      imageUrls = todo.image_url;
+    }
+  }
+
+  return {
+    id: todo.id,
+    dateStr: todo.date_str,
+    text: todo.text,
+    completed: todo.completed,
+    createdBy: todo.created_by,
+    imageUrls,
+  };
+}
+
 // TodoをSupabaseから取得
 export async function fetchTodos(): Promise<TodoItem[]> {
   try {
@@ -15,34 +40,7 @@ export async function fetchTodos(): Promise<TodoItem[]> {
     }
 
     // データベースのカラム名をアプリの型に変換
-    return (data || []).map((todo) => {
-      // image_urlを配列に変換（既存の文字列データとの互換性を保つ）
-      let imageUrls: string[] | undefined = undefined;
-      if (todo.image_url) {
-        if (typeof todo.image_url === "string") {
-          // 既存の文字列データの場合は配列に変換
-          try {
-            // JSON文字列の可能性をチェック
-            const parsed = JSON.parse(todo.image_url);
-            imageUrls = Array.isArray(parsed) ? parsed : [todo.image_url];
-          } catch {
-            // JSONでない場合は単一の文字列として扱う
-            imageUrls = [todo.image_url];
-          }
-        } else if (Array.isArray(todo.image_url)) {
-          imageUrls = todo.image_url;
-        }
-      }
-
-      return {
-        id: todo.id,
-        dateStr: todo.date_str,
-        text: todo.text,
-        completed: todo.completed,
-        createdBy: todo.created_by,
-        imageUrls,
-      };
-    });
+    return (data || []).map(mapTodoRow);
   } catch (err) {
     console.error("予期しないエラー:", err);
     return [];
@@ -123,17 +121,18 @@ export async function updateTodoImages(
       updateData.image_url = JSON.stringify(imageUrls);
     }
 
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from("todos")
       .update(updateData)
-      .eq("id", id);
+      .eq("id", id)
+      .select("id");
 
     if (error) {
       console.error("Todo画像の更新エラー:", error);
       return false;
     }
 
-    return true;
+    return (data || []).length > 0;
   } catch (err) {
     console.error("予期しないエラー:", err);
     return false;
@@ -143,14 +142,18 @@ export async function updateTodoImages(
 // Todoを削除
 export async function deleteTodo(id: string): Promise<boolean> {
   try {
-    const { error } = await supabase.from("todos").delete().eq("id", id);
+    const { data, error } = await supabase
+      .from("todos")
+      .delete()
+      .eq("id", id)
+      .select("id");
 
     if (error) {
       console.error("Todoの削除エラー:", error);
       return false;
     }
 
-    return true;
+    return (data || []).length > 0;
   } catch (err) {
     console.error("予期しないエラー:", err);
     return false;
@@ -159,45 +162,27 @@ export async function deleteTodo(id: string): Promise<boolean> {
 
 // 月のTodoを一括削除
 export async function deleteMonthTodos(
-  year: number,
-  month: number
-): Promise<boolean> {
+  todoIds: string[]
+): Promise<TodoItem[] | null> {
   try {
-    // Helper to format date as YYYY-MM-DD in local timezone
-    const formatLocalDate = (date: Date): string => {
-      const y = date.getFullYear();
-      const m = String(date.getMonth() + 1).padStart(2, "0");
-      const d = String(date.getDate()).padStart(2, "0");
-      return `${y}-${m}-${d}`;
-    };
+    if (todoIds.length === 0) return [];
 
-    // 月の最初の日と最後の日を計算
-    const startDate = new Date(year, month - 1, 1); // month は 1-12
-    const endDate = new Date(year, month, 0); // 月の最後の日
-
-    const startDateStr = formatLocalDate(startDate);
-    const endDateStr = formatLocalDate(endDate);
-
-    console.log(
-      `🗑️ ${year}年${month}月のTodoを削除中... (${startDateStr} ~ ${endDateStr})`
-    );
-
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from("todos")
       .delete()
-      .gte("date_str", startDateStr)
-      .lte("date_str", endDateStr);
+      .in("id", todoIds)
+      .select("*");
 
     if (error) {
       console.error("❌ 月のTodo削除エラー:", error);
-      return false;
+      return null;
     }
 
     console.log("✅ 月のTodo削除成功");
-    return true;
+    return (data || []).map(mapTodoRow);
   } catch (err) {
     console.error("❌ 予期しないエラー:", err);
-    return false;
+    return null;
   }
 }
 

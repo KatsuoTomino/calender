@@ -8,7 +8,7 @@ import {
   makeTodoImageKey,
 } from "../utils/r2Keys.ts";
 import { getMonthDateRange, isDateStrInMonth } from "../utils/todoDates.ts";
-import { DateColor } from "../types.ts";
+import type { DateColor } from "../types.ts";
 
 test("R2 object key validation rejects traversal and cross-user avatar access", () => {
   const userId = "user-123";

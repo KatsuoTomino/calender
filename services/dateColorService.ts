@@ -3,9 +3,7 @@ import { DateColor, DateColorType } from "../types";
 
 export async function fetchDateColors(): Promise<DateColor[]> {
   try {
-    const { data, error } = await supabase
-      .from("date_colors")
-      .select("*");
+    const { data, error } = await supabase.from("date_colors").select("*");
 
     if (error) {
       console.error("DateColorの取得エラー:", error);
@@ -32,14 +30,22 @@ export async function setDateColor(
 ): Promise<boolean> {
   try {
     if (color === null) {
-      // 色を解除するとき、ラベルが残っていればレコードを残す
-      const { data } = await supabase
+      const { data, error: lookupError } = await supabase
         .from("date_colors")
         .select("label")
         .eq("date_str", dateStr)
-        .single();
+        .maybeSingle();
 
-      if (data?.label) {
+      if (lookupError) {
+        console.error("DateColor参照エラー:", lookupError);
+        return false;
+      }
+
+      if (!data) {
+        return true;
+      }
+
+      if (data.label) {
         const { error } = await supabase
           .from("date_colors")
           .update({ color: null, updated_at: new Date().toISOString() })
@@ -63,17 +69,15 @@ export async function setDateColor(
       return true;
     }
 
-    const { error } = await supabase
-      .from("date_colors")
-      .upsert(
-        {
-          date_str: dateStr,
-          color,
-          created_by: createdBy,
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: "date_str" }
-      );
+    const { error } = await supabase.from("date_colors").upsert(
+      {
+        date_str: dateStr,
+        color,
+        created_by: createdBy,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "date_str" }
+    );
 
     if (error) {
       console.error("DateColor更新エラー:", error);
@@ -93,15 +97,25 @@ export async function setDateLabel(
   createdBy: string
 ): Promise<boolean> {
   try {
-    if (!label || label.trim() === "") {
-      // ラベルを消すとき、色も無ければレコード削除
-      const { data } = await supabase
+    const trimmed = label?.trim() || null;
+
+    if (!trimmed) {
+      const { data, error: lookupError } = await supabase
         .from("date_colors")
         .select("color")
         .eq("date_str", dateStr)
-        .single();
+        .maybeSingle();
 
-      if (data?.color) {
+      if (lookupError) {
+        console.error("DateLabel参照エラー:", lookupError);
+        return false;
+      }
+
+      if (!data) {
+        return true;
+      }
+
+      if (data.color) {
         const { error } = await supabase
           .from("date_colors")
           .update({ label: null, updated_at: new Date().toISOString() })
@@ -124,17 +138,15 @@ export async function setDateLabel(
       return true;
     }
 
-    const { error } = await supabase
-      .from("date_colors")
-      .upsert(
-        {
-          date_str: dateStr,
-          label: label.trim(),
-          created_by: createdBy,
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: "date_str" }
-      );
+    const { error } = await supabase.from("date_colors").upsert(
+      {
+        date_str: dateStr,
+        label: trimmed,
+        created_by: createdBy,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "date_str" }
+    );
 
     if (error) {
       console.error("DateLabel更新エラー:", error);

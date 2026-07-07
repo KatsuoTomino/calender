@@ -7,6 +7,7 @@
 - ✅ Vercel アカウント（無料で作成可能）
 - ✅ GitHub リポジトリ（既に準備済み）
 - ✅ Supabase 環境変数（URL、Anon Key）
+- ✅ Cloudflare R2 環境変数（画像アップロードを使う場合）
 
 ### 2. 環境変数の確認
 
@@ -15,6 +16,11 @@
 ```
 VITE_SUPABASE_URL=your_supabase_project_url
 VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
+R2_ACCOUNT_ID=your_cloudflare_account_id
+R2_ACCESS_KEY_ID=your_r2_access_key_id
+R2_SECRET_ACCESS_KEY=your_r2_secret_access_key
+R2_BUCKET_NAME=your_r2_bucket_name
+# 任意: R2_ENDPOINT=https://<account_id>.r2.cloudflarestorage.com
 ```
 
 ---
@@ -53,6 +59,13 @@ VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
 | ------------------------ | ---------------------------------- |
 | `VITE_SUPABASE_URL`      | あなたの Supabase プロジェクト URL |
 | `VITE_SUPABASE_ANON_KEY` | あなたの Supabase Anon Key         |
+| `R2_ACCOUNT_ID`          | Cloudflare アカウント ID           |
+| `R2_ACCESS_KEY_ID`       | R2 アクセスキー ID                 |
+| `R2_SECRET_ACCESS_KEY`   | R2 シークレットアクセスキー        |
+| `R2_BUCKET_NAME`         | R2 バケット名                      |
+| `R2_ENDPOINT`            | 任意の R2 エンドポイント           |
+
+R2 のシークレットには `VITE_` を付けないでください。`VITE_*` はブラウザに配信されるため、画像操作は `/api/r2` の Vercel Function で署名・削除します。
 
 **追加方法：**
 
@@ -122,9 +135,10 @@ Supabase ダッシュボードで以下を確認：
 
 1. Vercel ダッシュボード → プロジェクトを選択
 2. **Settings** → **Environment Variables**
-3. 変数名が`VITE_`で始まっているか確認
-4. 値が正しく設定されているか確認
-5. 再デプロイ（**Deployments** → 最新デプロイの右側メニュー → **Redeploy**）
+3. Supabase のクライアント用変数は`VITE_`で始まっているか確認
+4. R2 の秘密情報は`VITE_`なしの`R2_*`として設定されているか確認
+5. 値が正しく設定されているか確認
+6. 再デプロイ（**Deployments** → 最新デプロイの右側メニュー → **Redeploy**）
 
 ### ビルドエラー
 

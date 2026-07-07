@@ -35,7 +35,16 @@
 # .env.local
 VITE_SUPABASE_URL=your_supabase_project_url
 VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
+
+# Cloudflare R2（Vercel Functions などのサーバー環境だけに設定）
+R2_ACCOUNT_ID=your_cloudflare_account_id
+R2_ACCESS_KEY_ID=your_r2_access_key_id
+R2_SECRET_ACCESS_KEY=your_r2_secret_access_key
+R2_BUCKET_NAME=your_r2_bucket_name
+# 任意: R2_ENDPOINT=https://<account_id>.r2.cloudflarestorage.com
 ```
+
+`VITE_` プレフィックスの環境変数は Vite のビルドでクライアントコードに含まれます。R2 のシークレットは必ず `R2_*` としてサーバー側にだけ設定してください。
 
 ### ステップ 2: 管理者ユーザーの作成
 
@@ -124,6 +133,7 @@ npm run dev
 2. **環境変数の設定**
 
    - Vercel/Netlify などのホスティングサービスで環境変数を設定
+   - R2 のアクセスキーとシークレットは `VITE_` を付けず、サーバー関数用の環境変数として設定
 
 3. **メール確認の有効化**
 

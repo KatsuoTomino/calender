@@ -35,6 +35,14 @@
 # .env.local
 VITE_SUPABASE_URL=your_supabase_project_url
 VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
+
+# R2 は /api/r2 からのみ操作します。VITE_ を付けると Vite が
+# クライアントへ公開するため、秘密情報には絶対に付けないでください。
+R2_ACCOUNT_ID=your_cloudflare_account_id
+R2_ACCESS_KEY_ID=your_r2_access_key_id
+R2_SECRET_ACCESS_KEY=your_r2_secret_access_key
+R2_BUCKET_NAME=your_r2_bucket_name
+# 任意: R2_ENDPOINT=https://your_account_id.r2.cloudflarestorage.com
 ```
 
 ### ステップ 2: 管理者ユーザーの作成
@@ -76,6 +84,7 @@ npm run dev
 ## 🔒 セキュリティチェックリスト
 
 - [x] API キーを環境変数に移行
+- [x] R2 秘密鍵はサーバー環境変数（`R2_*`）でのみ利用
 - [x] `.env.local`が`.gitignore`に追加済み
 - [x] Supabase Auth 認証の実装
 - [x] RLS ポリシーの厳格化

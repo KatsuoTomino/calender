@@ -3,7 +3,14 @@ import { STORAGE_KEYS } from '../constants';
 
 export const getStoredUser = (): User | null => {
   const stored = localStorage.getItem(STORAGE_KEYS.USER);
-  return stored ? JSON.parse(stored) : null;
+  if (!stored) return null;
+
+  try {
+    return JSON.parse(stored);
+  } catch {
+    localStorage.removeItem(STORAGE_KEYS.USER);
+    return null;
+  }
 };
 
 export const saveUser = (user: User): void => {
@@ -12,7 +19,14 @@ export const saveUser = (user: User): void => {
 
 export const getStoredTodos = (): TodoItem[] => {
   const stored = localStorage.getItem(STORAGE_KEYS.TODOS);
-  return stored ? JSON.parse(stored) : [];
+  if (!stored) return [];
+
+  try {
+    return JSON.parse(stored);
+  } catch {
+    localStorage.removeItem(STORAGE_KEYS.TODOS);
+    return [];
+  }
 };
 
 export const saveTodos = (todos: TodoItem[]): void => {

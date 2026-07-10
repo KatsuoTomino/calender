@@ -8,6 +8,7 @@
 - APIキーとシークレットは`.env.local`ファイルで管理
 - ソースコードに機密情報を含めない
 - `.env.local`は`.gitignore`に追加済み
+- R2 のアクセスキーはサーバー専用の `R2_*` 環境変数に限定し、`VITE_*` として公開しない
 
 ### 2. Supabase Auth認証
 - サーバーサイドでの認証検証
@@ -34,6 +35,14 @@
 # Supabase設定
 VITE_SUPABASE_URL=your_supabase_url
 VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
+
+# R2設定（Vercel Function / サーバー専用。VITE_ を付けない）
+R2_ACCOUNT_ID=your_cloudflare_account_id
+R2_ACCESS_KEY_ID=your_r2_access_key_id
+R2_SECRET_ACCESS_KEY=your_r2_secret_access_key
+R2_BUCKET_NAME=your_r2_bucket_name
+# 任意: 未設定時は https://<R2_ACCOUNT_ID>.r2.cloudflarestorage.com
+R2_ENDPOINT=your_r2_endpoint
 ```
 
 ### 2. 管理者ユーザーの作成
@@ -75,6 +84,8 @@ SELECT * FROM pg_policies WHERE tablename = 'users';
 - **NEVER** APIキーをGitにコミットしない
 - 本番環境では環境変数を使用
 - 定期的にキーをローテーション
+- `VITE_*` 環境変数はクライアントのビルド成果物に含まれるため、シークレットには使用しない
+- 過去に `VITE_R2_*` として設定した R2 キーは漏えい済みとみなし、Cloudflare 側でローテーションする
 
 ### セッション管理
 - セッションは自動的にSupabaseが管理

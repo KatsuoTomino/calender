@@ -1,4 +1,4 @@
-import { TodoItem } from "../types";
+import { type TodoItem } from "../types.ts";
 
 export function formatLocalDate(date: Date): string {
   const y = date.getFullYear();

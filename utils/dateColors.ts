@@ -1,4 +1,12 @@
-import { type DateColor, type DateColorType } from "../types.ts";
+type DateColorType = "red" | "yellow" | "blue" | "green" | "purple" | null;
+
+type DateColor = {
+  id: string;
+  dateStr: string;
+  color: DateColorType;
+  label?: string | null;
+  createdBy: string;
+};
 
 export function applyDateColorOptimisticUpdate(
   dateColors: DateColor[],

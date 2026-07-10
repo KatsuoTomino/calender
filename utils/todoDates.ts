@@ -1,4 +1,6 @@
-import { type TodoItem } from "../types.ts";
+type TodoWithDateStr = {
+  dateStr: string;
+};
 
 export function formatLocalDate(date: Date): string {
   const y = date.getFullYear();
@@ -21,7 +23,7 @@ export function monthDateRange(year: number, month: number): {
 }
 
 export function isTodoInMonth(
-  todo: Pick<TodoItem, "dateStr">,
+  todo: TodoWithDateStr,
   year: number,
   month: number
 ): boolean {

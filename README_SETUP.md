@@ -35,7 +35,15 @@
 # .env.local
 VITE_SUPABASE_URL=your_supabase_project_url
 VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
+
+# R2 画像機能を Vercel Function 経由で使う場合（サーバー専用）
+R2_ACCOUNT_ID=your_cloudflare_account_id
+R2_ACCESS_KEY_ID=your_r2_access_key_id
+R2_SECRET_ACCESS_KEY=your_r2_secret_access_key
+R2_BUCKET_NAME=your_r2_bucket_name
 ```
+
+R2 のシークレットは `VITE_R2_*` として設定しないでください。`VITE_*` はブラウザ向けビルドに含まれるため、画像操作は認証付き `/api/r2` 経由で行います。
 
 ### ステップ 2: 管理者ユーザーの作成
 

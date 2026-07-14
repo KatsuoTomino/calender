@@ -1,8 +1,8 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import {
-  HeadObjectCommand,
-  GetObjectCommand,
-  getSignedUrl,
+  createHeadObjectCommand,
+  createGetObjectCommand,
+  signUrl,
   getR2Client,
   getBucketName,
 } from "../_lib/r2";
@@ -26,7 +26,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(400).json({ error: "Valid userId is required" });
   }
 
-  const client = getR2Client();
+  const client = await getR2Client();
   const bucket = getBucketName();
   if (!client || !bucket) {
     return res.status(500).json({ error: "R2 is not configured" });
@@ -37,17 +37,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const avatarKey = `users/${userId}/avatar.${ext}`;
 
       try {
-        await client.send(
-          new HeadObjectCommand({ Bucket: bucket, Key: avatarKey })
-        );
-
-        const getCommand = new GetObjectCommand({
+        const head = await createHeadObjectCommand({
           Bucket: bucket,
           Key: avatarKey,
         });
-        const url = await getSignedUrl(client, getCommand, {
-          expiresIn: 3600,
+        await client.send(head);
+
+        const getCommand = await createGetObjectCommand({
+          Bucket: bucket,
+          Key: avatarKey,
         });
+        const url = await signUrl(client, getCommand, { expiresIn: 3600 });
 
         return res.json({ url, key: avatarKey });
       } catch (error: any) {

@@ -1,5 +1,9 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { PutObjectCommand, getR2Client, getBucketName } from "../_lib/r2";
+import {
+  createPutObjectCommand,
+  getR2Client,
+  getBucketName,
+} from "../_lib/r2";
 import { getAuthUser } from "../_lib/auth";
 import {
   authorizeObjectKey,
@@ -30,7 +34,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const access = authorizeObjectKey(key, user.id, "write");
   if (denyKeyAccess(res, access)) return;
 
-  const client = getR2Client();
+  const client = await getR2Client();
   const bucket = getBucketName();
   if (!client || !bucket) {
     return res.status(500).json({ error: "R2 is not configured" });
@@ -41,18 +45,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (!body.length) {
       return res.status(400).json({ error: "Empty body" });
     }
-    if (body.length > 4 * 1024 * 1024) {
-      return res.status(413).json({ error: "File too large (max 4MB)" });
+    // Vercel request body limit ~4.5MB; base64 expands ~33%
+    if (body.length > 3 * 1024 * 1024) {
+      return res.status(413).json({ error: "File too large (max 3MB)" });
     }
 
-    await client.send(
-      new PutObjectCommand({
-        Bucket: bucket,
-        Key: key,
-        Body: body,
-        ContentType: String(contentType).toLowerCase(),
-      })
-    );
+    const command = await createPutObjectCommand({
+      Bucket: bucket,
+      Key: key,
+      Body: body,
+      ContentType: String(contentType).toLowerCase(),
+    });
+    await client.send(command);
 
     return res.json({ key });
   } catch (error) {

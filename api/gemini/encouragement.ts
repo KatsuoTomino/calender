@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { GoogleGenAI } from "../_lib/gemini";
+import { loadGemini } from "../_lib/gemini";
 import { verifyAuth } from "../_lib/auth";
 
 const MODEL = "gemini-2.5-flash";
@@ -26,6 +26,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
+    const { GoogleGenAI } = await loadGemini();
     const client = new GoogleGenAI({ apiKey });
     const response = await client.models.generateContent({
       model: MODEL,

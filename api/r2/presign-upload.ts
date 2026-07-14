@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import {
-  PutObjectCommand,
-  getSignedUrl,
+  createPutObjectCommand,
+  signUrl,
   getR2Client,
   getBucketName,
 } from "../_lib/r2";
@@ -33,19 +33,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const access = authorizeObjectKey(key, user.id, "write");
   if (denyKeyAccess(res, access)) return;
 
-  const client = getR2Client();
+  const client = await getR2Client();
   const bucket = getBucketName();
   if (!client || !bucket) {
     return res.status(500).json({ error: "R2 is not configured" });
   }
 
   try {
-    const command = new PutObjectCommand({
+    const command = await createPutObjectCommand({
       Bucket: bucket,
       Key: key,
       ContentType: contentType,
     });
-    const url = await getSignedUrl(client, command, { expiresIn: 600 });
+    const url = await signUrl(client, command, { expiresIn: 600 });
 
     return res.json({ url, key });
   } catch (error) {

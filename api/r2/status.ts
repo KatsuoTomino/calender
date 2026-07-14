@@ -12,7 +12,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(401).json({ error: "Unauthorized" });
   }
 
-  const client = getR2Client();
+  const client = await getR2Client();
   const bucket = getBucketName();
   return res.status(200).json({
     r2Configured: Boolean(client && bucket),

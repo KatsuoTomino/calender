@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import {
-  GetObjectCommand,
-  getSignedUrl,
+  createGetObjectCommand,
+  signUrl,
   getR2Client,
   getBucketName,
 } from "../_lib/r2";
@@ -21,7 +21,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const { key, keys } = req.body ?? {};
 
-  const client = getR2Client();
+  const client = await getR2Client();
   const bucket = getBucketName();
   if (!client || !bucket) {
     return res.status(500).json({ error: "R2 is not configured" });
@@ -39,8 +39,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       for (const k of keys) {
         const access = authorizeObjectKey(k, user.id, "read");
         if (denyKeyAccess(res, access)) return;
-        const command = new GetObjectCommand({ Bucket: bucket, Key: k });
-        urls[k] = await getSignedUrl(client, command, { expiresIn: 3600 });
+        const command = await createGetObjectCommand({
+          Bucket: bucket,
+          Key: k,
+        });
+        urls[k] = await signUrl(client, command, { expiresIn: 3600 });
       }
       return res.json({ urls });
     }
@@ -52,8 +55,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const access = authorizeObjectKey(key, user.id, "read");
     if (denyKeyAccess(res, access)) return;
 
-    const command = new GetObjectCommand({ Bucket: bucket, Key: key });
-    const url = await getSignedUrl(client, command, { expiresIn: 3600 });
+    const command = await createGetObjectCommand({
+      Bucket: bucket,
+      Key: key,
+    });
+    const url = await signUrl(client, command, { expiresIn: 3600 });
 
     return res.json({ url });
   } catch (error) {

@@ -140,8 +140,8 @@ const App: React.FC = () => {
       alert("画像ファイルを選択してください");
       return;
     }
-    if (file.size > 4 * 1024 * 1024) {
-      alert("画像のサイズは4MB以下にしてください");
+    if (file.size > 10 * 1024 * 1024) {
+      alert("画像のサイズは10MB以下にしてください");
       return;
     }
 

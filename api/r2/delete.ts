@@ -1,5 +1,9 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { DeleteObjectCommand, getR2Client, getBucketName } from "../_lib/r2";
+import {
+  createDeleteObjectCommand,
+  getR2Client,
+  getBucketName,
+} from "../_lib/r2";
 import { getAuthUser } from "../_lib/auth";
 import { authorizeObjectKey } from "../_lib/r2Keys";
 import { denyKeyAccess } from "../_lib/respond";
@@ -22,14 +26,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const access = authorizeObjectKey(key, user.id, "write");
   if (denyKeyAccess(res, access)) return;
 
-  const client = getR2Client();
+  const client = await getR2Client();
   const bucket = getBucketName();
   if (!client || !bucket) {
     return res.status(500).json({ error: "R2 is not configured" });
   }
 
   try {
-    await client.send(new DeleteObjectCommand({ Bucket: bucket, Key: key }));
+    const command = await createDeleteObjectCommand({
+      Bucket: bucket,
+      Key: key,
+    });
+    await client.send(command);
     return res.json({ success: true });
   } catch (error) {
     console.error("R2 delete error:", error);

@@ -380,8 +380,8 @@ const TodoList: React.FC<TodoListProps> = ({
           continue;
         }
         // サーバー経由アップロードの制限（Vercel request body ≈ 4.5MB）
-        if (file.size > 4 * 1024 * 1024) {
-          alert(`${file.name}のサイズは4MB以下にしてください`);
+        if (file.size > 10 * 1024 * 1024) {
+          alert(`${file.name}のサイズは10MB以下にしてください`);
           continue;
         }
 

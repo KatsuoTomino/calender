@@ -1,8 +1,13 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { HeadObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3";
-import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
-import { getR2Client, getBucketName } from "../_lib/r2";
-import { verifyAuth } from "../_lib/auth";
+import {
+  HeadObjectCommand,
+  GetObjectCommand,
+  getSignedUrl,
+  getR2Client,
+  getBucketName,
+} from "../_lib/r2";
+import { getAuthUser } from "../_lib/auth";
+import { isValidUserId } from "../_lib/r2Keys";
 
 const AVATAR_EXTENSIONS = ["jpg", "jpeg", "png", "webp", "gif"];
 
@@ -11,13 +16,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(405).json({ error: "Method not allowed" });
   }
 
-  if (!(await verifyAuth(req))) {
+  const user = await getAuthUser(req);
+  if (!user) {
     return res.status(401).json({ error: "Unauthorized" });
   }
 
-  const { userId } = req.body;
-  if (!userId) {
-    return res.status(400).json({ error: "userId is required" });
+  const { userId } = req.body ?? {};
+  if (!isValidUserId(userId)) {
+    return res.status(400).json({ error: "Valid userId is required" });
   }
 
   const client = getR2Client();
@@ -39,11 +45,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           Bucket: bucket,
           Key: avatarKey,
         });
-        const presignedUrl = await getSignedUrl(client, getCommand, {
+        const url = await getSignedUrl(client, getCommand, {
           expiresIn: 3600,
         });
 
-        return res.json({ url: presignedUrl, key: avatarKey });
+        return res.json({ url, key: avatarKey });
       } catch (error: any) {
         if (
           error.name === "NotFound" ||

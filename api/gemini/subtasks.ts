@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { GoogleGenAI, Type } from "@google/genai";
+import { GoogleGenAI, Type } from "../_lib/gemini";
 import { verifyAuth } from "../_lib/auth";
 
 const MODEL = "gemini-2.5-flash";

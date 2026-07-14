@@ -411,7 +411,7 @@ const TodoList: React.FC<TodoListProps> = ({
         showToast(`${uploadedKeys.length}枚の画像を追加しました`);
       } else {
         alert(
-          "画像のアップロードに失敗しました。ログイン済みか、画像サイズが4MB以下かを確認してください。"
+          "画像のアップロードに失敗しました。ログイン状態とネットワークを確認してください。"
         );
       }
     } catch (error) {

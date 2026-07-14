@@ -1,43 +1,45 @@
-import type {
-  S3Client as S3ClientType,
-  PutObjectCommandInput,
-  GetObjectCommandInput,
-  DeleteObjectCommandInput,
-  HeadObjectCommandInput,
-} from "@aws-sdk/client-s3";
-
 type AwsBundle = {
-  S3Client: typeof import("@aws-sdk/client-s3").S3Client;
-  PutObjectCommand: typeof import("@aws-sdk/client-s3").PutObjectCommand;
-  GetObjectCommand: typeof import("@aws-sdk/client-s3").GetObjectCommand;
-  DeleteObjectCommand: typeof import("@aws-sdk/client-s3").DeleteObjectCommand;
-  HeadObjectCommand: typeof import("@aws-sdk/client-s3").HeadObjectCommand;
-  getSignedUrl: typeof import("@aws-sdk/s3-request-presigner").getSignedUrl;
+  S3Client: new (config: Record<string, unknown>) => {
+    send: (command: unknown) => Promise<unknown>;
+  };
+  PutObjectCommand: new (input: Record<string, unknown>) => unknown;
+  GetObjectCommand: new (input: Record<string, unknown>) => unknown;
+  DeleteObjectCommand: new (input: Record<string, unknown>) => unknown;
+  HeadObjectCommand: new (input: Record<string, unknown>) => unknown;
+  getSignedUrl: (
+    client: unknown,
+    command: unknown,
+    options: { expiresIn: number }
+  ) => Promise<string>;
 };
 
 let awsBundle: AwsBundle | null = null;
-let _client: S3ClientType | null = null;
+let _client: InstanceType<AwsBundle["S3Client"]> | null = null;
 
 /**
- * Dynamic import avoids Vite+Vercel ESM static-import issues where SDK
- * bindings can be undefined at runtime.
+ * Dynamic import avoids Vite+Vercel ESM static-import issues.
+ * Do not use `import type` from @aws-sdk here — Vercel can emit a real require
+ * and crash the function at module load.
  */
 export async function loadAws(): Promise<AwsBundle> {
   if (awsBundle) return awsBundle;
   const s3 = await import("@aws-sdk/client-s3");
   const signer = await import("@aws-sdk/s3-request-presigner");
   awsBundle = {
-    S3Client: s3.S3Client,
-    PutObjectCommand: s3.PutObjectCommand,
-    GetObjectCommand: s3.GetObjectCommand,
-    DeleteObjectCommand: s3.DeleteObjectCommand,
-    HeadObjectCommand: s3.HeadObjectCommand,
-    getSignedUrl: signer.getSignedUrl,
+    S3Client: s3.S3Client as AwsBundle["S3Client"],
+    PutObjectCommand: s3.PutObjectCommand as AwsBundle["PutObjectCommand"],
+    GetObjectCommand: s3.GetObjectCommand as AwsBundle["GetObjectCommand"],
+    DeleteObjectCommand:
+      s3.DeleteObjectCommand as AwsBundle["DeleteObjectCommand"],
+    HeadObjectCommand: s3.HeadObjectCommand as AwsBundle["HeadObjectCommand"],
+    getSignedUrl: signer.getSignedUrl as AwsBundle["getSignedUrl"],
   };
   return awsBundle;
 }
 
-export async function getR2Client(): Promise<S3ClientType | null> {
+export async function getR2Client(): Promise<InstanceType<
+  AwsBundle["S3Client"]
+> | null> {
   if (_client) return _client;
 
   const endpoint = process.env.R2_ENDPOINT?.trim();
@@ -68,33 +70,33 @@ export function getBucketName(): string {
   return process.env.R2_BUCKET_NAME?.trim() || "";
 }
 
-export async function createPutObjectCommand(input: PutObjectCommandInput) {
+export async function createPutObjectCommand(input: Record<string, unknown>) {
   const { PutObjectCommand } = await loadAws();
   return new PutObjectCommand(input);
 }
 
-export async function createGetObjectCommand(input: GetObjectCommandInput) {
+export async function createGetObjectCommand(input: Record<string, unknown>) {
   const { GetObjectCommand } = await loadAws();
   return new GetObjectCommand(input);
 }
 
 export async function createDeleteObjectCommand(
-  input: DeleteObjectCommandInput
+  input: Record<string, unknown>
 ) {
   const { DeleteObjectCommand } = await loadAws();
   return new DeleteObjectCommand(input);
 }
 
-export async function createHeadObjectCommand(input: HeadObjectCommandInput) {
+export async function createHeadObjectCommand(input: Record<string, unknown>) {
   const { HeadObjectCommand } = await loadAws();
   return new HeadObjectCommand(input);
 }
 
 export async function signUrl(
-  client: S3ClientType,
+  client: unknown,
   command: unknown,
   options: { expiresIn: number }
 ) {
   const { getSignedUrl } = await loadAws();
-  return getSignedUrl(client as any, command as any, options);
+  return getSignedUrl(client, command, options);
 }

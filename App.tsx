@@ -17,6 +17,7 @@ import {
 } from "./services/authService";
 import { deleteImageFromR2, uploadAvatarToR2, getImageUrl, getAvatarFromR2 } from "./services/r2Service";
 import { fetchDateColors, setDateColor, setDateLabel, subscribeDateColorChanges } from "./services/dateColorService";
+import { logger } from "./services/logger";
 import Login from "./components/Login";
 import Calendar from "./components/Calendar";
 import TodoList from "./components/TodoList";
@@ -54,29 +55,18 @@ const App: React.FC = () => {
         setUser(appUser);
         saveUser(appUser);
         
-        // アバター画像をR2から読み込む
-        console.log(`🖼️ 認証状態変更: アバター画像を読み込み開始... userId: ${appUser.id}`);
         try {
           const avatarUrl = await getAvatarFromR2(appUser.id);
           if (avatarUrl) {
             setAvatarImageUrl(avatarUrl);
-            console.log("✅ 認証状態変更: アバター画像をR2から読み込みました");
+          } else if (appUser.avatarImageUrl) {
+            const fallbackUrl = await getImageUrl(appUser.avatarImageUrl);
+            setAvatarImageUrl(fallbackUrl);
           } else {
-            // フォールバック: localStorageのキーから取得
-            if (appUser.avatarImageUrl) {
-              const fallbackUrl = await getImageUrl(appUser.avatarImageUrl);
-              if (fallbackUrl) {
-                setAvatarImageUrl(fallbackUrl);
-                console.log("✅ 認証状態変更: アバター画像をlocalStorageのキーから読み込みました");
-              } else {
-                setAvatarImageUrl(null);
-              }
-            } else {
-              setAvatarImageUrl(null);
-            }
+            setAvatarImageUrl(null);
           }
-        } catch (error: any) {
-          console.error("❌ 認証状態変更: アバター画像の読み込みエラー:", error);
+        } catch (error) {
+          logger.error("アバター画像の読み込みエラー:", error);
           setAvatarImageUrl(null);
         }
       } else {
@@ -96,43 +86,23 @@ const App: React.FC = () => {
     if (user) {
       loadTodos();
 
-      // アバター画像をR2から読み込む
       const loadAvatarImage = async () => {
-        if (!user || !user.id) {
-          console.warn("⚠️ ユーザー情報が不完全です");
+        if (!user?.id) {
           setAvatarImageUrl(null);
           return;
         }
-
-        console.log(`🖼️ アバター画像を読み込み開始... userId: ${user.id}`);
-        
         try {
-          // R2から直接アバター画像を取得
           const url = await getAvatarFromR2(user.id);
           if (url) {
             setAvatarImageUrl(url);
-            console.log("✅ アバター画像をR2から読み込みました:", url.substring(0, 50) + "...");
+          } else if (user.avatarImageUrl) {
+            const fallbackUrl = await getImageUrl(user.avatarImageUrl);
+            setAvatarImageUrl(fallbackUrl);
           } else {
-            console.log("ℹ️ R2にアバター画像が見つかりませんでした");
-            // R2に存在しない場合は、localStorageに保存されているキーから取得を試みる（後方互換性）
-            if (user.avatarImageUrl) {
-              console.log("🔄 localStorageのキーから取得を試みます:", user.avatarImageUrl);
-              const fallbackUrl = await getImageUrl(user.avatarImageUrl);
-              if (fallbackUrl) {
-                setAvatarImageUrl(fallbackUrl);
-                console.log("✅ アバター画像をlocalStorageのキーから読み込みました");
-              } else {
-                console.log("ℹ️ localStorageのキーからも取得できませんでした");
-                setAvatarImageUrl(null);
-              }
-            } else {
-              console.log("ℹ️ localStorageにもアバター画像のキーがありません");
-              setAvatarImageUrl(null);
-            }
+            setAvatarImageUrl(null);
           }
-        } catch (error: any) {
-          console.error("❌ アバター画像の読み込みエラー:", error);
-          console.error("エラー詳細:", error.message, error);
+        } catch (error) {
+          logger.error("アバター画像の読み込みエラー:", error);
           setAvatarImageUrl(null);
         }
       };
@@ -156,104 +126,62 @@ const App: React.FC = () => {
     }
   }, [user]);
 
-  // アバター画像をアップロード
   const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    console.log("📸 アバター画像アップロード開始");
     const files = e.target.files;
-    
-    if (!files || files.length === 0) {
-      console.log("⚠️ ファイルが選択されていません");
-      return;
-    }
-    
+    if (!files || files.length === 0) return;
     if (!user) {
-      console.error("❌ ユーザーがログインしていません");
       alert("ログインが必要です");
       return;
     }
 
     const file = files[0];
-    console.log("📁 選択されたファイル:", file.name, "サイズ:", file.size, "タイプ:", file.type);
-    
-    // 画像ファイルかチェック
+
     if (!file.type.startsWith("image/")) {
       alert("画像ファイルを選択してください");
       return;
     }
-    
-    // ファイルサイズチェック（5MB制限）
-    if (file.size > 5 * 1024 * 1024) {
-      alert("画像のサイズは5MB以下にしてください");
+    if (file.size > 4 * 1024 * 1024) {
+      alert("画像のサイズは4MB以下にしてください");
       return;
     }
 
     try {
-      console.log("🔄 古いアバター画像を削除中...");
-      // 古いアバター画像を削除（複数の拡張子を試す）
       const extensions = ['jpg', 'jpeg', 'png', 'webp', 'gif'];
       for (const ext of extensions) {
-        const oldAvatarKey = `users/${user.id}/avatar.${ext}`;
-        try {
-          await deleteImageFromR2(oldAvatarKey);
-        } catch (error) {
-          // 404エラーは無視（存在しないファイル）
-        }
+        try { await deleteImageFromR2(`users/${user.id}/avatar.${ext}`); } catch { /* ignore */ }
       }
-      // 後方互換性: localStorageに保存されているキーも削除を試みる
       if (user.avatarImageUrl) {
-        try {
-          await deleteImageFromR2(user.avatarImageUrl);
-        } catch (error) {
-          // エラーは無視
-        }
+        try { await deleteImageFromR2(user.avatarImageUrl); } catch { /* ignore */ }
       }
 
-      console.log("📤 R2にアップロード中...");
-      // R2にアップロード
       const uploadedKey = await uploadAvatarToR2(file, user.id);
       if (!uploadedKey) {
-        console.error("❌ アップロードに失敗しました");
         alert("画像のアップロードに失敗しました。R2の設定を確認してください。");
         return;
       }
 
-      console.log("✅ アップロード成功:", uploadedKey);
-
-      // ユーザー情報を更新（後方互換性のためlocalStorageにも保存）
-      const updatedUser: User = {
-        ...user,
-        avatarImageUrl: uploadedKey,
-      };
+      const updatedUser: User = { ...user, avatarImageUrl: uploadedKey };
       setUser(updatedUser);
       saveUser(updatedUser);
-      console.log("💾 ユーザー情報をlocalStorageに保存しました（後方互換性）");
 
-      // R2から直接取得して表示（他の端末でも動作する）
-      console.log("🖼️ R2からアバター画像を取得中... userId:", user.id);
       const displayUrl = await getAvatarFromR2(user.id);
       if (displayUrl) {
         setAvatarImageUrl(displayUrl);
-        console.log("✅ アバター画像を更新しました（R2から取得）");
         alert("アバター画像を更新しました");
       } else {
-        console.warn("⚠️ R2から直接取得できませんでした。アップロードしたキーから取得を試みます...");
-        // フォールバック: アップロードしたキーから取得
         const fallbackUrl = await getImageUrl(uploadedKey);
         if (fallbackUrl) {
           setAvatarImageUrl(fallbackUrl);
-          console.log("✅ アバター画像を更新しました（フォールバック）");
           alert("アバター画像を更新しました");
         } else {
-          console.error("❌ 表示用URLの取得に失敗しました。アップロードは成功していますが、表示に問題がある可能性があります");
           alert("アバター画像をアップロードしましたが、表示に問題がある可能性があります。ページをリロードしてください。");
         }
       }
     } catch (error) {
-      console.error("❌ アバター画像アップロードエラー:", error);
+      logger.error("アバター画像アップロードエラー:", error);
       alert(`画像のアップロードに失敗しました: ${error instanceof Error ? error.message : "不明なエラー"}`);
     }
 
-    // ファイル入力のリセット
     if (avatarFileInputRef.current) {
       avatarFileInputRef.current.value = "";
     }
@@ -473,35 +401,20 @@ const App: React.FC = () => {
       prev.filter((t) => !monthTodos.find((mt) => mt.id === t.id))
     );
 
-    // R2から画像を削除
     if (totalImages > 0) {
-      console.log(`🗑️ 月の削除に伴い、${totalImages}枚の画像をR2から削除中...`);
       for (const todo of todosWithImages) {
-        if (todo.imageUrls && todo.imageUrls.length > 0) {
+        if (todo.imageUrls) {
           for (const imageKey of todo.imageUrls) {
-            try {
-              const deleted = await deleteImageFromR2(imageKey);
-              if (deleted) {
-                console.log("✅ R2からの画像削除成功:", imageKey);
-              } else {
-                console.warn("⚠️ R2からの画像削除に失敗:", imageKey);
-              }
-            } catch (error) {
-              console.error("❌ R2からの画像削除エラー:", error);
-            }
+            try { await deleteImageFromR2(imageKey); } catch { /* ignore */ }
           }
         }
       }
     }
 
-    // Supabaseで一括削除
     const success = await deleteMonthTodos(year, month);
     if (!success) {
-      // 失敗したら元に戻す
       setTodos((prev) => [...prev, ...monthTodos]);
       alert("月のTodo削除に失敗しました");
-    } else {
-      console.log("✅ 月のTodo削除完了");
     }
   };
 

@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from "react";
 import { TodoItem, User, DateColor, DateColorType } from "../types";
 import { generateId } from "../services/storageService";
 import { uploadImageToR2, getImageUrl, deleteImageFromR2 } from "../services/r2Service";
+import { logger } from "../services/logger";
 import Button from "./Button";
 
 interface TodoListProps {
@@ -175,6 +176,7 @@ const TodoList: React.FC<TodoListProps> = ({
   const [uploadingTodoId, setUploadingTodoId] = useState<string | null>(null);
   // 各タスクの画像URL（R2キー -> 表示用URL）のマッピング
   const [imageDisplayUrls, setImageDisplayUrls] = useState<Record<string, Record<string, string>>>({});
+  const [failedImageKeys, setFailedImageKeys] = useState<Record<string, boolean>>({});
   // 拡大表示用の画像情報
   const [expandedImage, setExpandedImage] = useState<{
     todoId: string;
@@ -301,13 +303,11 @@ const TodoList: React.FC<TodoListProps> = ({
               todoImageUrls[imageKey] = imageDisplayUrls[todo.id][imageKey];
               continue;
             }
-            // R2キーの場合はPresigned URLを生成
             const displayUrl = await getImageUrl(imageKey);
             if (displayUrl) {
               todoImageUrls[imageKey] = displayUrl;
             } else {
-              // Presigned URL生成に失敗した場合は元のキーを使用
-              todoImageUrls[imageKey] = imageKey;
+              logger.warn("画像URLの取得に失敗:", imageKey);
             }
           }
           if (Object.keys(todoImageUrls).length > 0) {
@@ -379,16 +379,15 @@ const TodoList: React.FC<TodoListProps> = ({
           alert(`${file.name}は画像ファイルではありません`);
           continue;
         }
-        // ファイルサイズチェック（10MB制限）
-        if (file.size > 10 * 1024 * 1024) {
-          alert(`${file.name}のサイズは10MB以下にしてください`);
+        // サーバー経由アップロードの制限（Vercel request body ≈ 4.5MB）
+        if (file.size > 4 * 1024 * 1024) {
+          alert(`${file.name}のサイズは4MB以下にしてください`);
           continue;
         }
 
         const uploadedKey = await uploadImageToR2(file, todoId);
         if (uploadedKey) {
           uploadedKeys.push(uploadedKey);
-          // 表示用URLを取得
           const displayUrl = await getImageUrl(uploadedKey);
           if (displayUrl) {
             setImageDisplayUrls((prev) => ({
@@ -398,20 +397,25 @@ const TodoList: React.FC<TodoListProps> = ({
                 [uploadedKey]: displayUrl,
               },
             }));
+          } else {
+            alert(
+              "画像の保存には成功しましたが、表示用URLの取得に失敗しました。ページを再読み込みするか、再ログインしてください。"
+            );
           }
         }
       }
 
       if (uploadedKeys.length > 0) {
-        // 既存の画像URLに新しい画像を追加
         const updatedImageUrls = [...currentImageUrls, ...uploadedKeys];
         onUpdateTodoImages(todoId, updatedImageUrls);
         showToast(`${uploadedKeys.length}枚の画像を追加しました`);
       } else {
-        alert("画像のアップロードに失敗しました");
+        alert(
+          "画像のアップロードに失敗しました。ログイン済みか、画像サイズが4MB以下かを確認してください。"
+        );
       }
     } catch (error) {
-      console.error("画像アップロードエラー:", error);
+      logger.error("画像アップロードエラー:", error);
       alert("画像のアップロードに失敗しました");
     } finally {
       setUploadingTodoId(null);
@@ -437,17 +441,10 @@ const TodoList: React.FC<TodoListProps> = ({
         closeConfirmModal();
         setIsDeleting(true);
 
-        // R2から画像を削除
         try {
-          console.log("🗑️ R2から画像を削除中:", imageKey);
-          const deleted = await deleteImageFromR2(imageKey);
-          if (deleted) {
-            console.log("✅ R2からの画像削除成功");
-          } else {
-            console.warn("⚠️ R2からの画像削除に失敗しましたが、データベースからは削除します");
-          }
+          await deleteImageFromR2(imageKey);
         } catch (error) {
-          console.error("❌ R2からの画像削除エラー:", error);
+          logger.error("R2からの画像削除エラー:", error);
         }
 
         // データベースから画像URLを削除
@@ -487,17 +484,7 @@ const TodoList: React.FC<TodoListProps> = ({
         // タスクに画像がある場合はR2からも削除
         if (todo?.imageUrls && todo.imageUrls.length > 0) {
           for (const imageKey of todo.imageUrls) {
-            try {
-              console.log("🗑️ タスク削除に伴いR2から画像を削除中:", imageKey);
-              const deleted = await deleteImageFromR2(imageKey);
-              if (deleted) {
-                console.log("✅ R2からの画像削除成功:", imageKey);
-              } else {
-                console.warn("⚠️ R2からの画像削除に失敗:", imageKey);
-              }
-            } catch (error) {
-              console.error("❌ R2からの画像削除エラー:", error);
-            }
+            try { await deleteImageFromR2(imageKey); } catch { /* ignore */ }
           }
         }
 
@@ -685,7 +672,18 @@ const TodoList: React.FC<TodoListProps> = ({
                     <div className="flex flex-wrap gap-2">
                       {todo.imageUrls.map((imageKey) => {
                         const displayUrl = imageDisplayUrls[todo.id]?.[imageKey];
-                        if (!displayUrl) return null;
+                        const failed = failedImageKeys[`${todo.id}:${imageKey}`];
+                        if (!displayUrl || failed) {
+                          return (
+                            <div
+                              key={imageKey}
+                              className="w-24 h-24 rounded-lg bg-slate-100 text-slate-400 text-[10px] flex items-center justify-center text-center p-1"
+                              title={imageKey}
+                            >
+                              {failed ? "表示失敗" : "読み込み中…"}
+                            </div>
+                          );
+                        }
                         
                         return (
                           <div 
@@ -698,7 +696,6 @@ const TodoList: React.FC<TodoListProps> = ({
                               todoText: todo.text,
                             })}
                             onTouchStart={(e) => {
-                              // タッチイベントでも拡大モーダルを開く
                               e.preventDefault();
                               setExpandedImage({
                                 todoId: todo.id,
@@ -713,8 +710,11 @@ const TodoList: React.FC<TodoListProps> = ({
                               alt={todo.text}
                               className="w-24 h-24 object-cover rounded-lg cursor-pointer hover:opacity-90 active:opacity-70 transition-opacity touch-manipulation"
                               draggable={false}
-                              onError={(e) => {
-                                e.currentTarget.style.display = "none";
+                              onError={() => {
+                                setFailedImageKeys((prev) => ({
+                                  ...prev,
+                                  [`${todo.id}:${imageKey}`]: true,
+                                }));
                               }}
                             />
                           </div>

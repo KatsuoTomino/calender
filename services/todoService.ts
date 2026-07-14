@@ -1,5 +1,6 @@
 import { supabase } from "./supabaseClient";
 import { TodoItem } from "../types";
+import { logger } from "./logger";
 
 // TodoをSupabaseから取得
 export async function fetchTodos(): Promise<TodoItem[]> {
@@ -10,7 +11,7 @@ export async function fetchTodos(): Promise<TodoItem[]> {
       .order("created_at", { ascending: true });
 
     if (error) {
-      console.error("Todoの取得エラー:", error);
+      logger.error("Todoの取得エラー:", error);
       return [];
     }
 
@@ -44,7 +45,7 @@ export async function fetchTodos(): Promise<TodoItem[]> {
       };
     });
   } catch (err) {
-    console.error("予期しないエラー:", err);
+    logger.error("予期しないエラー:", err);
     return [];
   }
 }
@@ -68,13 +69,13 @@ export async function addTodo(todo: TodoItem): Promise<boolean> {
     const { error } = await supabase.from("todos").insert(insertData).select();
 
     if (error) {
-      console.error("Todoの追加エラー:", error);
+      logger.error("Todoの追加エラー:", error);
       return false;
     }
 
     return true;
   } catch (err) {
-    console.error("予期しないエラー:", err);
+    logger.error("予期しないエラー:", err);
     return false;
   }
 }
@@ -94,13 +95,13 @@ export async function toggleTodo(
       .eq("id", id);
 
     if (error) {
-      console.error("Todoの更新エラー:", error);
+      logger.error("Todoの更新エラー:", error);
       return false;
     }
 
     return true;
   } catch (err) {
-    console.error("予期しないエラー:", err);
+    logger.error("予期しないエラー:", err);
     return false;
   }
 }
@@ -129,13 +130,13 @@ export async function updateTodoImages(
       .eq("id", id);
 
     if (error) {
-      console.error("Todo画像の更新エラー:", error);
+      logger.error("Todo画像の更新エラー:", error);
       return false;
     }
 
     return true;
   } catch (err) {
-    console.error("予期しないエラー:", err);
+    logger.error("予期しないエラー:", err);
     return false;
   }
 }
@@ -146,13 +147,13 @@ export async function deleteTodo(id: string): Promise<boolean> {
     const { error } = await supabase.from("todos").delete().eq("id", id);
 
     if (error) {
-      console.error("Todoの削除エラー:", error);
+      logger.error("Todoの削除エラー:", error);
       return false;
     }
 
     return true;
   } catch (err) {
-    console.error("予期しないエラー:", err);
+    logger.error("予期しないエラー:", err);
     return false;
   }
 }
@@ -178,10 +179,6 @@ export async function deleteMonthTodos(
     const startDateStr = formatLocalDate(startDate);
     const endDateStr = formatLocalDate(endDate);
 
-    console.log(
-      `🗑️ ${year}年${month}月のTodoを削除中... (${startDateStr} ~ ${endDateStr})`
-    );
-
     const { error } = await supabase
       .from("todos")
       .delete()
@@ -189,14 +186,13 @@ export async function deleteMonthTodos(
       .lte("date_str", endDateStr);
 
     if (error) {
-      console.error("❌ 月のTodo削除エラー:", error);
+      logger.error("月のTodo削除エラー:", error);
       return false;
     }
 
-    console.log("✅ 月のTodo削除成功");
     return true;
   } catch (err) {
-    console.error("❌ 予期しないエラー:", err);
+    logger.error("予期しないエラー:", err);
     return false;
   }
 }

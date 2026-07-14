@@ -27,3 +27,5 @@ mcp.json
 *.njsproj
 *.sln
 *.sw?
+
+.vercel

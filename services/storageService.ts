@@ -1,9 +1,17 @@
 import { TodoItem, User } from '../types';
 import { STORAGE_KEYS } from '../constants';
 
+function safeParse<T>(json: string | null, fallback: T): T {
+  if (!json) return fallback;
+  try {
+    return JSON.parse(json) as T;
+  } catch {
+    return fallback;
+  }
+}
+
 export const getStoredUser = (): User | null => {
-  const stored = localStorage.getItem(STORAGE_KEYS.USER);
-  return stored ? JSON.parse(stored) : null;
+  return safeParse<User | null>(localStorage.getItem(STORAGE_KEYS.USER), null);
 };
 
 export const saveUser = (user: User): void => {
@@ -11,8 +19,7 @@ export const saveUser = (user: User): void => {
 };
 
 export const getStoredTodos = (): TodoItem[] => {
-  const stored = localStorage.getItem(STORAGE_KEYS.TODOS);
-  return stored ? JSON.parse(stored) : [];
+  return safeParse<TodoItem[]>(localStorage.getItem(STORAGE_KEYS.TODOS), []);
 };
 
 export const saveTodos = (todos: TodoItem[]): void => {
@@ -20,5 +27,5 @@ export const saveTodos = (todos: TodoItem[]): void => {
 };
 
 export const generateId = (): string => {
-  return Math.random().toString(36).substring(2, 9);
+  return crypto.randomUUID();
 };

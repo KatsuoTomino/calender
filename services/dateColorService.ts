@@ -1,5 +1,6 @@
 import { supabase } from "./supabaseClient";
 import { DateColor, DateColorType } from "../types";
+import { logger } from "./logger";
 
 export async function fetchDateColors(): Promise<DateColor[]> {
   try {
@@ -8,7 +9,7 @@ export async function fetchDateColors(): Promise<DateColor[]> {
       .select("*");
 
     if (error) {
-      console.error("DateColorの取得エラー:", error);
+      logger.error("DateColorの取得エラー:", error);
       return [];
     }
 
@@ -20,7 +21,7 @@ export async function fetchDateColors(): Promise<DateColor[]> {
       createdBy: row.created_by,
     }));
   } catch (err) {
-    console.error("予期しないエラー:", err);
+    logger.error("予期しないエラー:", err);
     return [];
   }
 }
@@ -45,7 +46,7 @@ export async function setDateColor(
           .update({ color: null, updated_at: new Date().toISOString() })
           .eq("date_str", dateStr);
         if (error) {
-          console.error("DateColor更新エラー:", error);
+          logger.error("DateColor更新エラー:", error);
           return false;
         }
         return true;
@@ -57,7 +58,7 @@ export async function setDateColor(
         .eq("date_str", dateStr);
 
       if (error) {
-        console.error("DateColor削除エラー:", error);
+        logger.error("DateColor削除エラー:", error);
         return false;
       }
       return true;
@@ -76,13 +77,13 @@ export async function setDateColor(
       );
 
     if (error) {
-      console.error("DateColor更新エラー:", error);
+      logger.error("DateColor更新エラー:", error);
       return false;
     }
 
     return true;
   } catch (err) {
-    console.error("予期しないエラー:", err);
+    logger.error("予期しないエラー:", err);
     return false;
   }
 }
@@ -107,7 +108,7 @@ export async function setDateLabel(
           .update({ label: null, updated_at: new Date().toISOString() })
           .eq("date_str", dateStr);
         if (error) {
-          console.error("DateLabel更新エラー:", error);
+          logger.error("DateLabel更新エラー:", error);
           return false;
         }
         return true;
@@ -118,7 +119,7 @@ export async function setDateLabel(
         .delete()
         .eq("date_str", dateStr);
       if (error) {
-        console.error("DateLabel削除エラー:", error);
+        logger.error("DateLabel削除エラー:", error);
         return false;
       }
       return true;
@@ -137,13 +138,13 @@ export async function setDateLabel(
       );
 
     if (error) {
-      console.error("DateLabel更新エラー:", error);
+      logger.error("DateLabel更新エラー:", error);
       return false;
     }
 
     return true;
   } catch (err) {
-    console.error("予期しないエラー:", err);
+    logger.error("予期しないエラー:", err);
     return false;
   }
 }

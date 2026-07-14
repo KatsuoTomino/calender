@@ -238,6 +238,11 @@ const App: React.FC = () => {
     setDateColors((prev) => {
       const existing = prev.find((dc) => dc.dateStr === dateStr);
       if (color === null) {
+        if (existing?.label) {
+          return prev.map((dc) =>
+            dc.dateStr === dateStr ? { ...dc, color: null } : dc
+          );
+        }
         return prev.filter((dc) => dc.dateStr !== dateStr);
       }
       if (existing) {

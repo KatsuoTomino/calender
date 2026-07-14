@@ -26,13 +26,13 @@ export async function loadAws(): Promise<AwsBundle> {
   const s3 = await import("@aws-sdk/client-s3");
   const signer = await import("@aws-sdk/s3-request-presigner");
   awsBundle = {
-    S3Client: s3.S3Client as AwsBundle["S3Client"],
-    PutObjectCommand: s3.PutObjectCommand as AwsBundle["PutObjectCommand"],
-    GetObjectCommand: s3.GetObjectCommand as AwsBundle["GetObjectCommand"],
+    S3Client: s3.S3Client as unknown as AwsBundle["S3Client"],
+    PutObjectCommand: s3.PutObjectCommand as unknown as AwsBundle["PutObjectCommand"],
+    GetObjectCommand: s3.GetObjectCommand as unknown as AwsBundle["GetObjectCommand"],
     DeleteObjectCommand:
-      s3.DeleteObjectCommand as AwsBundle["DeleteObjectCommand"],
-    HeadObjectCommand: s3.HeadObjectCommand as AwsBundle["HeadObjectCommand"],
-    getSignedUrl: signer.getSignedUrl as AwsBundle["getSignedUrl"],
+      s3.DeleteObjectCommand as unknown as AwsBundle["DeleteObjectCommand"],
+    HeadObjectCommand: s3.HeadObjectCommand as unknown as AwsBundle["HeadObjectCommand"],
+    getSignedUrl: signer.getSignedUrl as unknown as AwsBundle["getSignedUrl"],
   };
   return awsBundle;
 }

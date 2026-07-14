@@ -6,12 +6,46 @@
   "framework": "vite",
   "functions": {
     "api/**/*.ts": {
-      "memory": 1024,
-      "maxDuration": 30,
-      "includeFiles": "{api/_lib/**,node_modules/@aws-sdk/**,node_modules/@supabase/**,node_modules/@google/**}"
+      "maxDuration": 30
     }
   },
   "rewrites": [
+    {
+      "source": "/api/r2/presign-upload",
+      "destination": "/api/r2?op=presign-upload"
+    },
+    {
+      "source": "/api/r2/presign-get",
+      "destination": "/api/r2?op=presign-get"
+    },
+    {
+      "source": "/api/r2/upload",
+      "destination": "/api/r2?op=upload"
+    },
+    {
+      "source": "/api/r2/delete",
+      "destination": "/api/r2?op=delete"
+    },
+    {
+      "source": "/api/r2/find-avatar",
+      "destination": "/api/r2?op=find-avatar"
+    },
+    {
+      "source": "/api/r2/status",
+      "destination": "/api/r2?op=status"
+    },
+    {
+      "source": "/api/r2/ping",
+      "destination": "/api/r2?op=ping"
+    },
+    {
+      "source": "/api/gemini/subtasks",
+      "destination": "/api/gemini?op=subtasks"
+    },
+    {
+      "source": "/api/gemini/encouragement",
+      "destination": "/api/gemini?op=encouragement"
+    },
     {
       "source": "/((?!api/).*)",
       "destination": "/index.html"

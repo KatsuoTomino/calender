@@ -59,7 +59,20 @@ export function localApiPlugin(): Plugin {
             return;
           }
 
-          const modulePath = `/api/${route}.ts`;
+          // Match vercel.json: /api/r2/<op> and /api/gemini/<op> → single handlers
+          let modulePath = `/api/${route}.ts`;
+          let routedOp: string | undefined;
+          const r2Match = /^r2\/([^/]+)$/.exec(route);
+          if (r2Match) {
+            modulePath = "/api/r2.ts";
+            routedOp = r2Match[1];
+          }
+          const geminiMatch = /^gemini\/([^/]+)$/.exec(route);
+          if (geminiMatch) {
+            modulePath = "/api/gemini.ts";
+            routedOp = geminiMatch[1];
+          }
+
           const mod = await server.ssrLoadModule(modulePath);
           const handler = mod.default;
           if (typeof handler !== "function") {
@@ -86,6 +99,9 @@ export function localApiPlugin(): Plugin {
 
           const url = new URL(req.url || "/", "http://localhost");
           vercelReq.query = Object.fromEntries(url.searchParams.entries());
+          if (routedOp) {
+            vercelReq.query.op = routedOp;
+          }
 
           await handler(vercelReq, wrapResponse(res));
         } catch (error) {

@@ -35,6 +35,7 @@ const App: React.FC = () => {
   const [dateColors, setDateColors] = useState<DateColor[]>([]);
   const avatarFileInputRef = useRef<HTMLInputElement>(null);
   const refreshingAvatarUrlRef = useRef<string | null>(null);
+  const activeUserIdRef = useRef<string | null>(null);
 
   // 認証状態の監視
   useEffect(() => {
@@ -53,6 +54,7 @@ const App: React.FC = () => {
           avatarColor: storedUser?.avatarColor || "bg-purple-500",
           avatarImageUrl: storedUser?.avatarImageUrl,
         };
+        activeUserIdRef.current = appUser.id;
         setUser(appUser);
         saveUser(appUser);
         
@@ -71,6 +73,7 @@ const App: React.FC = () => {
           setAvatarImageUrl(null);
         }
       } else {
+        activeUserIdRef.current = null;
         setUser(null);
         setTodos([]);
         setAvatarImageUrl(null);
@@ -162,6 +165,7 @@ const App: React.FC = () => {
       }
 
       const updatedUser: User = { ...user, avatarImageUrl: uploadedKey };
+      activeUserIdRef.current = updatedUser.id;
       setUser(updatedUser);
       saveUser(updatedUser);
 
@@ -190,6 +194,8 @@ const App: React.FC = () => {
 
   const handleAvatarLoadError = async () => {
     if (!user || !avatarImageUrl) return;
+    if (activeUserIdRef.current !== user.id) return;
+    const failedUserId = user.id;
     const failedUrl = avatarImageUrl;
 
     // R2 presigned URLs expire, so renew a failed URL once before hiding it.
@@ -202,7 +208,8 @@ const App: React.FC = () => {
     }
 
     refreshingAvatarUrlRef.current = failedUrl;
-    const refreshedUrl = await getAvatarFromR2(user.id);
+    const refreshedUrl = await getAvatarFromR2(failedUserId);
+    if (activeUserIdRef.current !== failedUserId) return;
     if (!refreshedUrl || refreshedUrl === failedUrl) {
       setAvatarImageUrl((currentUrl) =>
         currentUrl === failedUrl ? null : currentUrl
@@ -230,6 +237,7 @@ const App: React.FC = () => {
         avatarColor: storedUser?.avatarColor || "bg-purple-500",
         avatarImageUrl: storedUser?.avatarImageUrl,
       };
+      activeUserIdRef.current = appUser.id;
       setUser(appUser);
       saveUser(appUser);
     }
@@ -293,11 +301,13 @@ const App: React.FC = () => {
   };
 
   const handleLogin = (newUser: User) => {
+    activeUserIdRef.current = newUser.id;
     setUser(newUser);
     saveUser(newUser);
   };
 
   const handleLogout = async () => {
+    activeUserIdRef.current = null;
     await signOut();
     localStorage.removeItem("kizuna_user");
     setUser(null);

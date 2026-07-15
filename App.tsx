@@ -57,13 +57,16 @@ const App: React.FC = () => {
         activeUserIdRef.current = appUser.id;
         setUser(appUser);
         saveUser(appUser);
+        const requestedUserId = appUser.id;
         
         try {
-          const avatarUrl = await getAvatarFromR2(appUser.id);
+          const avatarUrl = await getAvatarFromR2(requestedUserId);
+          if (activeUserIdRef.current !== requestedUserId) return;
           if (avatarUrl) {
             setAvatarImageUrl(avatarUrl);
           } else if (appUser.avatarImageUrl) {
             const fallbackUrl = await getImageUrl(appUser.avatarImageUrl);
+            if (activeUserIdRef.current !== requestedUserId) return;
             setAvatarImageUrl(fallbackUrl);
           } else {
             setAvatarImageUrl(null);
@@ -95,12 +98,16 @@ const App: React.FC = () => {
           setAvatarImageUrl(null);
           return;
         }
+        const requestedUserId = user.id;
+        if (activeUserIdRef.current !== requestedUserId) return;
         try {
-          const url = await getAvatarFromR2(user.id);
+          const url = await getAvatarFromR2(requestedUserId);
+          if (activeUserIdRef.current !== requestedUserId) return;
           if (url) {
             setAvatarImageUrl(url);
           } else if (user.avatarImageUrl) {
             const fallbackUrl = await getImageUrl(user.avatarImageUrl);
+            if (activeUserIdRef.current !== requestedUserId) return;
             setAvatarImageUrl(fallbackUrl);
           } else {
             setAvatarImageUrl(null);

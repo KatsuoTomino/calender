@@ -199,6 +199,7 @@ const TodoList: React.FC<TodoListProps> = ({
 
   const inputRef = useRef<HTMLInputElement>(null);
   const todoFileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
+  const refreshingImageUrlsRef = useRef<Record<string, string>>({});
 
   // Helper to format date as YYYY-MM-DD in local timezone
   const formatLocalDate = (date: Date): string => {
@@ -431,6 +432,60 @@ const TodoList: React.FC<TodoListProps> = ({
     // 新しいタブで画像を開く（ユーザーが右クリックで保存可能）
     window.open(displayUrl, '_blank');
     showToast("画像を新しいタブで開きました");
+  };
+
+  const handleImageLoad = (todoId: string, imageKey: string) => {
+    const retryKey = `${todoId}:${imageKey}`;
+    delete refreshingImageUrlsRef.current[retryKey];
+    if (failedImageKeys[retryKey]) {
+      setFailedImageKeys((prev) => {
+        const { [retryKey]: _removed, ...rest } = prev;
+        return rest;
+      });
+    }
+  };
+
+  const handleImageLoadError = async (
+    todoId: string,
+    imageKey: string,
+    expiredUrl: string
+  ) => {
+    const retryKey = `${todoId}:${imageKey}`;
+
+    // R2 presigned URLs expire, so renew a failed URL once before showing an error.
+    // https://developers.cloudflare.com/r2/api/s3/presigned-urls/
+    if (refreshingImageUrlsRef.current[retryKey] === expiredUrl) {
+      setFailedImageKeys((prev) => ({ ...prev, [retryKey]: true }));
+      return;
+    }
+
+    refreshingImageUrlsRef.current[retryKey] = expiredUrl;
+    const refreshedUrl = await getImageUrl(imageKey);
+    if (!refreshedUrl || refreshedUrl === expiredUrl) {
+      setFailedImageKeys((prev) => ({ ...prev, [retryKey]: true }));
+      return;
+    }
+
+    // Mark the renewed URL so a genuinely missing object cannot retry forever.
+    // The ref is cleared by onLoad and does not trigger an extra render:
+    // https://react.dev/reference/react/useRef
+    refreshingImageUrlsRef.current[retryKey] = refreshedUrl;
+    setFailedImageKeys((prev) => {
+      const { [retryKey]: _removed, ...rest } = prev;
+      return rest;
+    });
+    setImageDisplayUrls((prev) => ({
+      ...prev,
+      [todoId]: {
+        ...prev[todoId],
+        [imageKey]: refreshedUrl,
+      },
+    }));
+    setExpandedImage((prev) =>
+      prev?.todoId === todoId && prev.imageKey === imageKey
+        ? { ...prev, displayUrl: refreshedUrl }
+        : prev
+    );
   };
 
   const handleRemoveTodoImage = (todoId: string, imageKey: string) => {
@@ -710,12 +765,14 @@ const TodoList: React.FC<TodoListProps> = ({
                               alt={todo.text}
                               className="w-24 h-24 object-cover rounded-lg cursor-pointer hover:opacity-90 active:opacity-70 transition-opacity touch-manipulation"
                               draggable={false}
-                              onError={() => {
-                                setFailedImageKeys((prev) => ({
-                                  ...prev,
-                                  [`${todo.id}:${imageKey}`]: true,
-                                }));
-                              }}
+                              onLoad={() => handleImageLoad(todo.id, imageKey)}
+                              onError={() =>
+                                void handleImageLoadError(
+                                  todo.id,
+                                  imageKey,
+                                  displayUrl
+                                )
+                              }
                             />
                           </div>
                         );
@@ -903,6 +960,16 @@ const TodoList: React.FC<TodoListProps> = ({
               alt="拡大画像"
               className="max-w-full max-h-[90vh] sm:max-h-[80vh] w-auto h-auto object-contain rounded-lg shadow-2xl touch-manipulation"
               style={{ userSelect: 'none' }}
+              onLoad={() =>
+                handleImageLoad(expandedImage.todoId, expandedImage.imageKey)
+              }
+              onError={() =>
+                void handleImageLoadError(
+                  expandedImage.todoId,
+                  expandedImage.imageKey,
+                  expandedImage.displayUrl
+                )
+              }
             />
           </div>
         </div>

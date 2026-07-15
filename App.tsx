@@ -34,6 +34,7 @@ const App: React.FC = () => {
   const [avatarImageUrl, setAvatarImageUrl] = useState<string | null>(null); // アバター画像の表示用URL
   const [dateColors, setDateColors] = useState<DateColor[]>([]);
   const avatarFileInputRef = useRef<HTMLInputElement>(null);
+  const refreshingAvatarUrlRef = useRef<string | null>(null);
 
   // 認証状態の監視
   useEffect(() => {
@@ -185,6 +186,29 @@ const App: React.FC = () => {
     if (avatarFileInputRef.current) {
       avatarFileInputRef.current.value = "";
     }
+  };
+
+  const handleAvatarLoadError = async () => {
+    if (!user || !avatarImageUrl) return;
+
+    // R2 presigned URLs expire, so renew a failed URL once before hiding it.
+    // https://developers.cloudflare.com/r2/api/s3/presigned-urls/
+    if (refreshingAvatarUrlRef.current === avatarImageUrl) {
+      setAvatarImageUrl(null);
+      return;
+    }
+
+    refreshingAvatarUrlRef.current = avatarImageUrl;
+    const refreshedUrl = await getAvatarFromR2(user.id);
+    if (!refreshedUrl || refreshedUrl === avatarImageUrl) {
+      setAvatarImageUrl(null);
+      return;
+    }
+
+    // useRef keeps retry bookkeeping without causing a render.
+    // https://react.dev/reference/react/useRef
+    refreshingAvatarUrlRef.current = refreshedUrl;
+    setAvatarImageUrl(refreshedUrl);
   };
 
   const checkCurrentUser = async () => {
@@ -457,6 +481,12 @@ const App: React.FC = () => {
                 src={avatarImageUrl}
                 alt={user.name}
                 className="w-full h-full object-cover"
+                onLoad={() => {
+                  refreshingAvatarUrlRef.current = null;
+                }}
+                onError={() => {
+                  void handleAvatarLoadError();
+                }}
               />
             ) : (
               <div

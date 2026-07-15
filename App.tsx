@@ -34,6 +34,8 @@ const App: React.FC = () => {
   const [avatarImageUrl, setAvatarImageUrl] = useState<string | null>(null); // アバター画像の表示用URL
   const [dateColors, setDateColors] = useState<DateColor[]>([]);
   const avatarFileInputRef = useRef<HTMLInputElement>(null);
+  const refreshingAvatarUrlRef = useRef<string | null>(null);
+  const activeUserIdRef = useRef<string | null>(null);
 
   // 認証状態の監視
   useEffect(() => {
@@ -52,15 +54,19 @@ const App: React.FC = () => {
           avatarColor: storedUser?.avatarColor || "bg-purple-500",
           avatarImageUrl: storedUser?.avatarImageUrl,
         };
+        activeUserIdRef.current = appUser.id;
         setUser(appUser);
         saveUser(appUser);
+        const requestedUserId = appUser.id;
         
         try {
-          const avatarUrl = await getAvatarFromR2(appUser.id);
+          const avatarUrl = await getAvatarFromR2(requestedUserId);
+          if (activeUserIdRef.current !== requestedUserId) return;
           if (avatarUrl) {
             setAvatarImageUrl(avatarUrl);
           } else if (appUser.avatarImageUrl) {
             const fallbackUrl = await getImageUrl(appUser.avatarImageUrl);
+            if (activeUserIdRef.current !== requestedUserId) return;
             setAvatarImageUrl(fallbackUrl);
           } else {
             setAvatarImageUrl(null);
@@ -70,6 +76,7 @@ const App: React.FC = () => {
           setAvatarImageUrl(null);
         }
       } else {
+        activeUserIdRef.current = null;
         setUser(null);
         setTodos([]);
         setAvatarImageUrl(null);
@@ -91,12 +98,16 @@ const App: React.FC = () => {
           setAvatarImageUrl(null);
           return;
         }
+        const requestedUserId = user.id;
+        if (activeUserIdRef.current !== requestedUserId) return;
         try {
-          const url = await getAvatarFromR2(user.id);
+          const url = await getAvatarFromR2(requestedUserId);
+          if (activeUserIdRef.current !== requestedUserId) return;
           if (url) {
             setAvatarImageUrl(url);
           } else if (user.avatarImageUrl) {
             const fallbackUrl = await getImageUrl(user.avatarImageUrl);
+            if (activeUserIdRef.current !== requestedUserId) return;
             setAvatarImageUrl(fallbackUrl);
           } else {
             setAvatarImageUrl(null);
@@ -161,6 +172,7 @@ const App: React.FC = () => {
       }
 
       const updatedUser: User = { ...user, avatarImageUrl: uploadedKey };
+      activeUserIdRef.current = updatedUser.id;
       setUser(updatedUser);
       saveUser(updatedUser);
 
@@ -187,6 +199,39 @@ const App: React.FC = () => {
     }
   };
 
+  const handleAvatarLoadError = async () => {
+    if (!user || !avatarImageUrl) return;
+    if (activeUserIdRef.current !== user.id) return;
+    const failedUserId = user.id;
+    const failedUrl = avatarImageUrl;
+
+    // R2 presigned URLs expire, so renew a failed URL once before hiding it.
+    // https://developers.cloudflare.com/r2/api/s3/presigned-urls/
+    if (refreshingAvatarUrlRef.current === failedUrl) {
+      setAvatarImageUrl((currentUrl) =>
+        currentUrl === failedUrl ? null : currentUrl
+      );
+      return;
+    }
+
+    refreshingAvatarUrlRef.current = failedUrl;
+    const refreshedUrl = await getAvatarFromR2(failedUserId);
+    if (activeUserIdRef.current !== failedUserId) return;
+    if (!refreshedUrl || refreshedUrl === failedUrl) {
+      setAvatarImageUrl((currentUrl) =>
+        currentUrl === failedUrl ? null : currentUrl
+      );
+      return;
+    }
+
+    // useRef keeps retry bookkeeping without causing a render.
+    // https://react.dev/reference/react/useRef
+    refreshingAvatarUrlRef.current = refreshedUrl;
+    setAvatarImageUrl((currentUrl) =>
+      currentUrl === failedUrl ? refreshedUrl : currentUrl
+    );
+  };
+
   const checkCurrentUser = async () => {
     const authUser = await getCurrentUser();
     if (authUser) {
@@ -199,6 +244,7 @@ const App: React.FC = () => {
         avatarColor: storedUser?.avatarColor || "bg-purple-500",
         avatarImageUrl: storedUser?.avatarImageUrl,
       };
+      activeUserIdRef.current = appUser.id;
       setUser(appUser);
       saveUser(appUser);
     }
@@ -262,11 +308,13 @@ const App: React.FC = () => {
   };
 
   const handleLogin = (newUser: User) => {
+    activeUserIdRef.current = newUser.id;
     setUser(newUser);
     saveUser(newUser);
   };
 
   const handleLogout = async () => {
+    activeUserIdRef.current = null;
     await signOut();
     localStorage.removeItem("kizuna_user");
     setUser(null);
@@ -457,6 +505,12 @@ const App: React.FC = () => {
                 src={avatarImageUrl}
                 alt={user.name}
                 className="w-full h-full object-cover"
+                onLoad={() => {
+                  refreshingAvatarUrlRef.current = null;
+                }}
+                onError={() => {
+                  void handleAvatarLoadError();
+                }}
               />
             ) : (
               <div

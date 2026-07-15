@@ -190,25 +190,32 @@ const App: React.FC = () => {
 
   const handleAvatarLoadError = async () => {
     if (!user || !avatarImageUrl) return;
+    const failedUrl = avatarImageUrl;
 
     // R2 presigned URLs expire, so renew a failed URL once before hiding it.
     // https://developers.cloudflare.com/r2/api/s3/presigned-urls/
-    if (refreshingAvatarUrlRef.current === avatarImageUrl) {
-      setAvatarImageUrl(null);
+    if (refreshingAvatarUrlRef.current === failedUrl) {
+      setAvatarImageUrl((currentUrl) =>
+        currentUrl === failedUrl ? null : currentUrl
+      );
       return;
     }
 
-    refreshingAvatarUrlRef.current = avatarImageUrl;
+    refreshingAvatarUrlRef.current = failedUrl;
     const refreshedUrl = await getAvatarFromR2(user.id);
-    if (!refreshedUrl || refreshedUrl === avatarImageUrl) {
-      setAvatarImageUrl(null);
+    if (!refreshedUrl || refreshedUrl === failedUrl) {
+      setAvatarImageUrl((currentUrl) =>
+        currentUrl === failedUrl ? null : currentUrl
+      );
       return;
     }
 
     // useRef keeps retry bookkeeping without causing a render.
     // https://react.dev/reference/react/useRef
     refreshingAvatarUrlRef.current = refreshedUrl;
-    setAvatarImageUrl(refreshedUrl);
+    setAvatarImageUrl((currentUrl) =>
+      currentUrl === failedUrl ? refreshedUrl : currentUrl
+    );
   };
 
   const checkCurrentUser = async () => {

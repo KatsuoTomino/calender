@@ -6,7 +6,7 @@ import {
   addTodo,
   toggleTodo,
   deleteTodo,
-  deleteMonthTodos,
+  deleteTodosByIds,
   subscribeTodoChanges,
   updateTodoImages,
 } from "./services/todoService";
@@ -21,6 +21,8 @@ import { logger } from "./services/logger";
 import Login from "./components/Login";
 import Calendar from "./components/Calendar";
 import TodoList from "./components/TodoList";
+import { mutateThenCleanup } from "./utils/mutationCleanup";
+import { formatLocalDate, isTodoInMonth } from "./utils/todoDates";
 
 const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
@@ -146,18 +148,25 @@ const App: React.FC = () => {
     }
 
     try {
-      const extensions = ['jpg', 'jpeg', 'png', 'webp', 'gif'];
-      for (const ext of extensions) {
-        try { await deleteImageFromR2(`users/${user.id}/avatar.${ext}`); } catch { /* ignore */ }
-      }
-      if (user.avatarImageUrl) {
-        try { await deleteImageFromR2(user.avatarImageUrl); } catch { /* ignore */ }
-      }
+      const extensions = ["jpg", "jpeg", "png", "webp", "gif"];
+      const oldAvatarKeys = new Set([
+        ...extensions.map((ext) => `users/${user.id}/avatar.${ext}`),
+        ...(user.avatarImageUrl ? [user.avatarImageUrl] : []),
+      ]);
 
+      // Upload first so a transient failure cannot destroy the current avatar.
       const uploadedKey = await uploadAvatarToR2(file, user.id);
       if (!uploadedKey) {
         alert("画像のアップロードに失敗しました。R2の設定を確認してください。");
         return;
+      }
+
+      oldAvatarKeys.delete(uploadedKey);
+      for (const oldAvatarKey of oldAvatarKeys) {
+        const deleted = await deleteImageFromR2(oldAvatarKey);
+        if (!deleted) {
+          logger.warn("古いアバター画像の削除に失敗:", oldAvatarKey);
+        }
       }
 
       const updatedUser: User = { ...user, avatarImageUrl: uploadedKey };
@@ -329,7 +338,7 @@ const App: React.FC = () => {
     }
   };
 
-  const handleDeleteTodo = async (id: string) => {
+  const handleDeleteTodo = async (id: string): Promise<boolean> => {
     // 楽観的更新
     const deletedTodo = todos.find((t) => t.id === id);
     setTodos((prev) => prev.filter((t) => t.id !== id));
@@ -340,10 +349,15 @@ const App: React.FC = () => {
       // 失敗したら元に戻す
       setTodos((prev) => [...prev, deletedTodo]);
       alert("Todoの削除に失敗しました");
+      return false;
     }
+    return success;
   };
 
-  const handleUpdateTodoImages = async (id: string, imageUrls: string[] | null) => {
+  const handleUpdateTodoImages = async (
+    id: string,
+    imageUrls: string[] | null
+  ): Promise<boolean> => {
     // 楽観的更新
     const originalTodo = todos.find((t) => t.id === id);
     setTodos((prev) =>
@@ -358,20 +372,16 @@ const App: React.FC = () => {
         prev.map((t) => (t.id === id ? originalTodo : t))
       );
       alert("画像の更新に失敗しました");
+      return false;
     }
+    return success;
   };
 
   const handleDeleteMonthTodos = async () => {
     const year = currentDate.getFullYear();
     const month = currentDate.getMonth() + 1;
 
-    const monthTodos = todos.filter((todo) => {
-      const todoDate = new Date(todo.dateStr);
-      return (
-        todoDate.getFullYear() === year &&
-        todoDate.getMonth() === currentDate.getMonth()
-      );
-    });
+    const monthTodos = todos.filter((todo) => isTodoInMonth(todo, year, month));
 
     if (monthTodos.length === 0) {
       alert(`${year}年${month}月のTodoはありません`);
@@ -401,17 +411,21 @@ const App: React.FC = () => {
       prev.filter((t) => !monthTodos.find((mt) => mt.id === t.id))
     );
 
-    if (totalImages > 0) {
-      for (const todo of todosWithImages) {
-        if (todo.imageUrls) {
-          for (const imageKey of todo.imageUrls) {
-            try { await deleteImageFromR2(imageKey); } catch { /* ignore */ }
+    const success = await mutateThenCleanup(
+      // Delete only the rows the user confirmed. A date-range delete can also
+      // remove a concurrently-created Todo that was never shown in the dialog.
+      () => deleteTodosByIds(monthTodos.map((todo) => todo.id)),
+      async () => {
+        for (const todo of todosWithImages) {
+          for (const imageKey of todo.imageUrls || []) {
+            const deleted = await deleteImageFromR2(imageKey);
+            if (!deleted) {
+              logger.warn("月削除後のR2画像クリーンアップに失敗:", imageKey);
+            }
           }
         }
       }
-    }
-
-    const success = await deleteMonthTodos(year, month);
+    );
     if (!success) {
       setTodos((prev) => [...prev, ...monthTodos]);
       alert("月のTodo削除に失敗しました");
@@ -419,12 +433,6 @@ const App: React.FC = () => {
   };
 
   // Filter todos for selected date (use local timezone)
-  const formatLocalDate = (date: Date): string => {
-    const y = date.getFullYear();
-    const m = String(date.getMonth() + 1).padStart(2, "0");
-    const d = String(date.getDate()).padStart(2, "0");
-    return `${y}-${m}-${d}`;
-  };
   const selectedDateStr = formatLocalDate(selectedDate);
   const dayTodos = todos.filter((t) => t.dateStr === selectedDateStr);
   const importantTodos = todos.filter((t) => t.dateStr === 'important');

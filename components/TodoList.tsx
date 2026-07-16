@@ -14,7 +14,11 @@ interface TodoListProps {
   onAddTodo: (todo: TodoItem) => void;
   onToggleTodo: (id: string) => void;
   onDeleteTodo: (id: string) => Promise<boolean>;
-  onUpdateTodoImages: (id: string, imageUrls: string[] | null) => Promise<boolean>;
+  onUpdateTodoImages: (
+    id: string,
+    imageUrls: string[] | null,
+    expectedImageUrls: string[] | null
+  ) => Promise<boolean>;
   currentUser: User;
   onClose: () => void;
   dateColors?: DateColor[];
@@ -408,13 +412,16 @@ const TodoList: React.FC<TodoListProps> = ({
 
       if (uploadedKeys.length > 0) {
         const updatedImageUrls = [...currentImageUrls, ...uploadedKeys];
-        const updated = await onUpdateTodoImages(todoId, updatedImageUrls);
+        const updated = await onUpdateTodoImages(
+          todoId,
+          updatedImageUrls,
+          currentImageUrls
+        );
         if (updated) {
           showToast(`${uploadedKeys.length}枚の画像を追加しました`);
         } else {
-          await Promise.all(
-            uploadedKeys.map((imageKey) => deleteImageFromR2(imageKey))
-          );
+          // The DB may have committed even if its response was lost. Keep the
+          // uploaded objects rather than risk deleting referenced image data.
           setImageDisplayUrls((prev) => {
             const todoUrls = { ...(prev[todoId] || {}) };
             for (const imageKey of uploadedKeys) {
@@ -465,7 +472,8 @@ const TodoList: React.FC<TodoListProps> = ({
             () =>
               onUpdateTodoImages(
                 todoId,
-                updatedImageUrls.length > 0 ? updatedImageUrls : null
+                updatedImageUrls.length > 0 ? updatedImageUrls : null,
+                todo?.imageUrls || null
               ),
             async () => {
               const deleted = await deleteImageFromR2(imageKey);

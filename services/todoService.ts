@@ -1,6 +1,7 @@
 import { supabase } from "./supabaseClient";
 import { TodoItem } from "../types";
 import { logger } from "./logger";
+import { buildExpectedImageFilter } from "../utils/todoImages";
 
 // TodoをSupabaseから取得
 export async function fetchTodos(): Promise<TodoItem[]> {
@@ -109,7 +110,8 @@ export async function toggleTodo(
 // Todoの画像を更新（配列全体を更新）
 export async function updateTodoImages(
   id: string,
-  imageUrls: string[] | null
+  imageUrls: string[] | null,
+  expectedImageUrls: string[] | null
 ): Promise<boolean> {
   try {
     const updateData: any = {
@@ -127,12 +129,23 @@ export async function updateTodoImages(
     // Supabase mutations return no rows by default. Selecting the id lets us
     // distinguish success from a zero-row update (for example, blocked by RLS).
     // https://supabase.com/docs/reference/javascript/update
-    const { data, error } = await supabase
+    let query = supabase
       .from("todos")
       .update(updateData)
-      .eq("id", id)
-      .select("id")
-      .maybeSingle();
+      .eq("id", id);
+
+    // Compare-and-set prevents a stale client from restoring an image key
+    // that another client removed and already deleted from R2.
+    const expectedFilter = buildExpectedImageFilter(expectedImageUrls);
+    if (expectedFilter.kind === "null") {
+      query = query.is("image_url", null);
+    } else if (expectedFilter.kind === "oneOf") {
+      query = query.in("image_url", expectedFilter.values);
+    } else {
+      query = query.eq("image_url", expectedFilter.value);
+    }
+
+    const { data, error } = await query.select("id").maybeSingle();
 
     if (error) {
       logger.error("Todo画像の更新エラー:", error);

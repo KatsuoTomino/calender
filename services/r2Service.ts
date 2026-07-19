@@ -29,6 +29,21 @@ async function apiPost<T = any>(path: string, body: object): Promise<T> {
   return res.json();
 }
 
+export function normalizeR2Key(imageKeyOrUrl: string): string {
+  if (
+    imageKeyOrUrl.startsWith("http://") ||
+    imageKeyOrUrl.startsWith("https://")
+  ) {
+    try {
+      const url = new URL(imageKeyOrUrl);
+      return url.pathname.substring(1);
+    } catch {
+      return imageKeyOrUrl;
+    }
+  }
+  return imageKeyOrUrl;
+}
+
 function fileToBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -146,18 +161,7 @@ export async function getImageUrl(
   imageKeyOrUrl: string
 ): Promise<string | null> {
   try {
-    let imageKey = imageKeyOrUrl;
-    if (
-      imageKeyOrUrl.startsWith("http://") ||
-      imageKeyOrUrl.startsWith("https://")
-    ) {
-      try {
-        const url = new URL(imageKeyOrUrl);
-        imageKey = url.pathname.substring(1);
-      } catch {
-        imageKey = imageKeyOrUrl;
-      }
-    }
+    const imageKey = normalizeR2Key(imageKeyOrUrl);
 
     const { url } = await apiPost<{ url: string }>("/api/r2/presign-get", {
       key: imageKey,
@@ -174,13 +178,7 @@ export async function getImageUrl(
  */
 export async function deleteImageFromR2(imageKey: string): Promise<boolean> {
   try {
-    let key = imageKey;
-    if (imageKey.startsWith("http://") || imageKey.startsWith("https://")) {
-      const url = new URL(imageKey);
-      key = url.pathname.substring(1);
-    }
-
-    await apiPost("/api/r2/delete", { key });
+    await apiPost("/api/r2/delete", { key: normalizeR2Key(imageKey) });
     return true;
   } catch (error: any) {
     console.error("Delete image error:", error.message);

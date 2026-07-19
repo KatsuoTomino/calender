@@ -1,6 +1,7 @@
 import { supabase } from "./supabaseClient";
 import { TodoItem } from "../types";
 import { logger } from "./logger";
+import { buildExpectedImageFilter } from "../utils/todoImages";
 
 // TodoをSupabaseから取得
 export async function fetchTodos(): Promise<TodoItem[]> {
@@ -109,7 +110,8 @@ export async function toggleTodo(
 // Todoの画像を更新（配列全体を更新）
 export async function updateTodoImages(
   id: string,
-  imageUrls: string[] | null
+  imageUrls: string[] | null,
+  expectedImageUrls: string[] | null
 ): Promise<boolean> {
   try {
     const updateData: any = {
@@ -124,17 +126,33 @@ export async function updateTodoImages(
       updateData.image_url = JSON.stringify(imageUrls);
     }
 
-    const { error } = await supabase
+    // Supabase mutations return no rows by default. Selecting the id lets us
+    // distinguish success from a zero-row update (for example, blocked by RLS).
+    // https://supabase.com/docs/reference/javascript/update
+    let query = supabase
       .from("todos")
       .update(updateData)
       .eq("id", id);
+
+    // Compare-and-set prevents a stale client from restoring an image key
+    // that another client removed and already deleted from R2.
+    const expectedFilter = buildExpectedImageFilter(expectedImageUrls);
+    if (expectedFilter.kind === "null") {
+      query = query.is("image_url", null);
+    } else if (expectedFilter.kind === "oneOf") {
+      query = query.in("image_url", expectedFilter.values);
+    } else {
+      query = query.eq("image_url", expectedFilter.value);
+    }
+
+    const { data, error } = await query.select("id").maybeSingle();
 
     if (error) {
       logger.error("Todo画像の更新エラー:", error);
       return false;
     }
 
-    return true;
+    return data !== null;
   } catch (err) {
     logger.error("予期しないエラー:", err);
     return false;
@@ -144,53 +162,44 @@ export async function updateTodoImages(
 // Todoを削除
 export async function deleteTodo(id: string): Promise<boolean> {
   try {
-    const { error } = await supabase.from("todos").delete().eq("id", id);
+    // https://supabase.com/docs/reference/javascript/delete
+    const { data, error } = await supabase
+      .from("todos")
+      .delete()
+      .eq("id", id)
+      .select("id")
+      .maybeSingle();
 
     if (error) {
       logger.error("Todoの削除エラー:", error);
       return false;
     }
 
-    return true;
+    return data !== null;
   } catch (err) {
     logger.error("予期しないエラー:", err);
     return false;
   }
 }
 
-// 月のTodoを一括削除
-export async function deleteMonthTodos(
-  year: number,
-  month: number
-): Promise<boolean> {
+// 確認画面に表示したTodoだけを削除する
+export async function deleteTodosByIds(ids: string[]): Promise<boolean> {
+  if (ids.length === 0) return true;
+
   try {
-    // Helper to format date as YYYY-MM-DD in local timezone
-    const formatLocalDate = (date: Date): string => {
-      const y = date.getFullYear();
-      const m = String(date.getMonth() + 1).padStart(2, "0");
-      const d = String(date.getDate()).padStart(2, "0");
-      return `${y}-${m}-${d}`;
-    };
-
-    // 月の最初の日と最後の日を計算
-    const startDate = new Date(year, month - 1, 1); // month は 1-12
-    const endDate = new Date(year, month, 0); // 月の最後の日
-
-    const startDateStr = formatLocalDate(startDate);
-    const endDateStr = formatLocalDate(endDate);
-
-    const { error } = await supabase
+    // https://supabase.com/docs/reference/javascript/delete
+    const { data, error } = await supabase
       .from("todos")
       .delete()
-      .gte("date_str", startDateStr)
-      .lte("date_str", endDateStr);
+      .in("id", ids)
+      .select("id");
 
     if (error) {
-      logger.error("月のTodo削除エラー:", error);
+      logger.error("Todo一括削除エラー:", error);
       return false;
     }
 
-    return true;
+    return (data || []).length === ids.length;
   } catch (err) {
     logger.error("予期しないエラー:", err);
     return false;

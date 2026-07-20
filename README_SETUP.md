@@ -35,7 +35,15 @@
 # .env.local
 VITE_SUPABASE_URL=your_supabase_project_url
 VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
+R2_ENDPOINT=https://your_account_id.r2.cloudflarestorage.com
+R2_ACCESS_KEY_ID=your_r2_access_key_id
+R2_SECRET_ACCESS_KEY=your_r2_secret_access_key
+R2_BUCKET_NAME=your_r2_bucket_name
 ```
+
+R2の値はサーバー専用です。秘密情報がブラウザへ公開されるため、`VITE_R2_*`という名前にはしないでください。
+
+3 MBを超える画像のアップロードには、R2バケットのCORS Policyで`http://localhost:5173`からの`PUT`と`Content-Type`ヘッダーを許可する必要があります。設定例は[デプロイ手順](./VERCEL_DEPLOY.md#cloudflare-r2-cors-policy必須)を参照してください。
 
 ### ステップ 2: 管理者ユーザーの作成
 
@@ -124,6 +132,7 @@ npm run dev
 2. **環境変数の設定**
 
    - Vercel/Netlify などのホスティングサービスで環境変数を設定
+   - R2の秘密情報は`R2_*`として設定し、R2バケットに本番オリジン用のCORS Policyを設定
 
 3. **メール確認の有効化**
 

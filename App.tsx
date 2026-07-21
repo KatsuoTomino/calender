@@ -15,7 +15,13 @@ import {
   onAuthStateChange,
   signOut,
 } from "./services/authService";
-import { deleteImageFromR2, uploadAvatarToR2, getImageUrl, getAvatarFromR2 } from "./services/r2Service";
+import {
+  deleteImageFromR2,
+  getAvatarFromR2,
+  getImageUrl,
+  normalizeR2Key,
+  uploadAvatarToR2,
+} from "./services/r2Service";
 import { fetchDateColors, setDateColor, setDateLabel, subscribeDateColorChanges } from "./services/dateColorService";
 import { logger } from "./services/logger";
 import Login from "./components/Login";
@@ -149,10 +155,12 @@ const App: React.FC = () => {
 
     try {
       const extensions = ["jpg", "jpeg", "png", "webp", "gif"];
-      const oldAvatarKeys = new Set([
-        ...extensions.map((ext) => `users/${user.id}/avatar.${ext}`),
-        ...(user.avatarImageUrl ? [user.avatarImageUrl] : []),
-      ]);
+      const oldAvatarKeys = new Set(
+        [
+          ...extensions.map((ext) => `users/${user.id}/avatar.${ext}`),
+          ...(user.avatarImageUrl ? [user.avatarImageUrl] : []),
+        ].map(normalizeR2Key)
+      );
 
       // Upload first so a transient failure cannot destroy the current avatar.
       const uploadedKey = await uploadAvatarToR2(file, user.id);
@@ -161,7 +169,7 @@ const App: React.FC = () => {
         return;
       }
 
-      oldAvatarKeys.delete(uploadedKey);
+      oldAvatarKeys.delete(normalizeR2Key(uploadedKey));
       for (const oldAvatarKey of oldAvatarKeys) {
         const deleted = await deleteImageFromR2(oldAvatarKey);
         if (!deleted) {
@@ -356,7 +364,8 @@ const App: React.FC = () => {
 
   const handleUpdateTodoImages = async (
     id: string,
-    imageUrls: string[] | null
+    imageUrls: string[] | null,
+    expectedImageUrls: string[] | null
   ): Promise<boolean> => {
     // 楽観的更新
     const originalTodo = todos.find((t) => t.id === id);
@@ -365,7 +374,7 @@ const App: React.FC = () => {
     );
 
     // Supabaseで更新
-    const success = await updateTodoImages(id, imageUrls);
+    const success = await updateTodoImages(id, imageUrls, expectedImageUrls);
     if (!success && originalTodo) {
       // 失敗したら元に戻す
       setTodos((prev) =>

@@ -1,6 +1,7 @@
 import { supabase } from "./supabaseClient";
 import { DateColor, DateColorType } from "../types";
 import { logger } from "./logger";
+import { clearDateColorField } from "./dateColorMutations";
 
 export async function fetchDateColors(): Promise<DateColor[]> {
   try {
@@ -33,32 +34,30 @@ export async function setDateColor(
 ): Promise<boolean> {
   try {
     if (color === null) {
-      // 色を解除するとき、ラベルが残っていればレコードを残す
-      const { data } = await supabase
-        .from("date_colors")
-        .select("label")
-        .eq("date_str", dateStr)
-        .single();
+      // Supabase は update/delete に複数フィルターを連結できる:
+      // https://supabase.com/docs/reference/javascript/using-filters
+      const result = await clearDateColorField(
+        () =>
+          supabase
+            .from("date_colors")
+            .update({ color: null, updated_at: new Date().toISOString() })
+            .eq("date_str", dateStr),
+        () =>
+          supabase
+            .from("date_colors")
+            .delete()
+            .eq("date_str", dateStr)
+            .is("color", null)
+            .is("label", null)
+      );
 
-      if (data?.label) {
-        const { error } = await supabase
-          .from("date_colors")
-          .update({ color: null, updated_at: new Date().toISOString() })
-          .eq("date_str", dateStr);
-        if (error) {
-          logger.error("DateColor更新エラー:", error);
-          return false;
-        }
-        return true;
-      }
-
-      const { error } = await supabase
-        .from("date_colors")
-        .delete()
-        .eq("date_str", dateStr);
-
-      if (error) {
-        logger.error("DateColor削除エラー:", error);
+      if (!result.success) {
+        logger.error(
+          result.failedStep === "update"
+            ? "DateColor更新エラー:"
+            : "DateColor空レコード削除エラー:",
+          result.error
+        );
         return false;
       }
       return true;
@@ -95,31 +94,28 @@ export async function setDateLabel(
 ): Promise<boolean> {
   try {
     if (!label || label.trim() === "") {
-      // ラベルを消すとき、色も無ければレコード削除
-      const { data } = await supabase
-        .from("date_colors")
-        .select("color")
-        .eq("date_str", dateStr)
-        .single();
+      const result = await clearDateColorField(
+        () =>
+          supabase
+            .from("date_colors")
+            .update({ label: null, updated_at: new Date().toISOString() })
+            .eq("date_str", dateStr),
+        () =>
+          supabase
+            .from("date_colors")
+            .delete()
+            .eq("date_str", dateStr)
+            .is("color", null)
+            .is("label", null)
+      );
 
-      if (data?.color) {
-        const { error } = await supabase
-          .from("date_colors")
-          .update({ label: null, updated_at: new Date().toISOString() })
-          .eq("date_str", dateStr);
-        if (error) {
-          logger.error("DateLabel更新エラー:", error);
-          return false;
-        }
-        return true;
-      }
-
-      const { error } = await supabase
-        .from("date_colors")
-        .delete()
-        .eq("date_str", dateStr);
-      if (error) {
-        logger.error("DateLabel削除エラー:", error);
+      if (!result.success) {
+        logger.error(
+          result.failedStep === "update"
+            ? "DateLabel更新エラー:"
+            : "DateLabel空レコード削除エラー:",
+          result.error
+        );
         return false;
       }
       return true;

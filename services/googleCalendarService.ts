@@ -289,6 +289,11 @@ function loadGisScript(): Promise<void> {
   });
 }
 
+/** Obtain a Calendar API token. May redirect on mobile (promise never settles). */
+export function ensureGoogleCalendarAccess(): Promise<string> {
+  return requestAccessToken();
+}
+
 function requestAccessToken(): Promise<string> {
   const clientId = getClientId();
   if (!clientId) {

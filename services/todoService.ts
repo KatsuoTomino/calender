@@ -174,14 +174,20 @@ export async function updateTodoGoogleMark(
 // Todoを削除
 export async function deleteTodo(id: string): Promise<boolean> {
   try {
-    const { error } = await supabase.from("todos").delete().eq("id", id);
+    // Require a deleted row. A no-op (0 rows, no error) used to look like
+    // success and let callers destroy linked Google Calendar events anyway.
+    const { data, error } = await supabase
+      .from("todos")
+      .delete()
+      .eq("id", id)
+      .select("id");
 
     if (error) {
       logger.error("Todoの削除エラー:", error);
       return false;
     }
 
-    return true;
+    return Boolean(data && data.length > 0);
   } catch (err) {
     logger.error("予期しないエラー:", err);
     return false;

@@ -600,20 +600,22 @@ const TodoList: React.FC<TodoListProps> = ({
 
   const handleDeleteTodo = (todoId: string) => {
     const todo = todos.find((t) => t.id === todoId);
-    // GカレチェックON + 実イベントあり → 必ず両方削除
-    const gCalChecked = Boolean(todo?.googleChecked);
     const canDeleteFromGoogle = hasGoogleCalendarEvent(todo);
 
-    if (gCalChecked && canDeleteFromGoogle) {
+    if (canDeleteFromGoogle) {
       showConfirmModal(
         "タスクを削除",
-        `「${todo?.text || "このタスク"}」を削除しますか？\n\nGカレにチェックがあるため、Googleカレンダーの予定も削除します。`,
+        `「${todo?.text || "このタスク"}」を削除しますか？\n\nGoogleカレンダーからも削除しますか？`,
         () => {
           void performDeleteTodo(todoId, { alsoDeleteFromGoogle: true });
         },
         {
-          confirmLabel: "両方削除",
+          confirmLabel: "両方から削除",
           confirmBusyLabel: "削除中...",
+          secondaryLabel: "アプリのみ削除",
+          onSecondary: () => {
+            void performDeleteTodo(todoId, { alsoDeleteFromGoogle: false });
+          },
         }
       );
       return;

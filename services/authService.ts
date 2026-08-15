@@ -1,15 +1,37 @@
 import { supabase } from "./supabaseClient";
 import { User as SupabaseUser } from "@supabase/supabase-js";
+import { User } from "../types";
 import { logger } from "./logger";
 
-// 管理者でログイン
+/** Build the in-app profile. Never reuse another account's stored profile. */
+export function toAppUser(
+  authUser: SupabaseUser,
+  storedUser: User | null
+): User {
+  const sameUser = storedUser?.id === authUser.id;
+  const metaName =
+    typeof authUser.user_metadata?.name === "string"
+      ? authUser.user_metadata.name.trim()
+      : "";
+  const emailName = authUser.email?.split("@")[0]?.trim() || "";
+
+  return {
+    id: authUser.id,
+    name: metaName || (sameUser ? storedUser?.name : "") || emailName || "ユーザー",
+    role: (sameUser && storedUser?.role) || "partner",
+    avatarColor:
+      (sameUser && storedUser?.avatarColor) || "bg-purple-500",
+    avatarImageUrl: sameUser ? storedUser?.avatarImageUrl : undefined,
+  };
+}
+
 export async function signInWithEmail(
   email: string,
   password: string
 ): Promise<{ user: SupabaseUser | null; error: Error | null }> {
   try {
     const { data, error } = await supabase.auth.signInWithPassword({
-      email,
+      email: email.trim(),
       password,
     });
 

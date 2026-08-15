@@ -14,6 +14,7 @@ import {
   getCurrentUser,
   onAuthStateChange,
   signOut,
+  toAppUser,
 } from "./services/authService";
 import { deleteImageFromR2, uploadAvatarToR2, getImageUrl, getAvatarFromR2 } from "./services/r2Service";
 import { fetchDateColors, setDateColor, setDateLabel, subscribeDateColorChanges } from "./services/dateColorService";
@@ -53,13 +54,7 @@ const App: React.FC = () => {
       if (authUser) {
         // 既存のユーザー情報を読み込む（アバター画像を含む）
         const storedUser = getStoredUser();
-        const appUser: User = {
-          id: authUser.id,
-          name: authUser.user_metadata?.name || "ユーザー",
-          role: storedUser?.role || "partner",
-          avatarColor: storedUser?.avatarColor || "bg-purple-500",
-          avatarImageUrl: storedUser?.avatarImageUrl,
-        };
+        const appUser = toAppUser(authUser, storedUser);
         setUser(appUser);
         saveUser(appUser);
         
@@ -78,6 +73,7 @@ const App: React.FC = () => {
           setAvatarImageUrl(null);
         }
       } else {
+        localStorage.removeItem("kizuna_user");
         setUser(null);
         setTodos([]);
         setAvatarImageUrl(null);
@@ -248,13 +244,7 @@ const App: React.FC = () => {
     if (authUser) {
       // 既存のユーザー情報を読み込む（アバター画像を含む）
       const storedUser = getStoredUser();
-      const appUser: User = {
-        id: authUser.id,
-        name: authUser.user_metadata?.name || "ユーザー",
-        role: storedUser?.role || "partner",
-        avatarColor: storedUser?.avatarColor || "bg-purple-500",
-        avatarImageUrl: storedUser?.avatarImageUrl,
-      };
+      const appUser = toAppUser(authUser, storedUser);
       setUser(appUser);
       saveUser(appUser);
     }

@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { User } from "../types";
-import { signInWithEmail } from "../services/authService";
+import { signInWithEmail, toAppUser } from "../services/authService";
 import Button from "./Button";
 
 interface LoginProps {
@@ -23,7 +23,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
 
     // Supabase Authで認証
     const { user: authUser, error: authError } = await signInWithEmail(
-      userId,
+      userId.trim(),
       password
     );
 
@@ -32,15 +32,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
       return;
     }
 
-    // アプリケーション用のユーザーオブジェクトを作成
-    const user: User = {
-      id: authUser.id,
-      name: authUser.user_metadata?.name || "管理者",
-      role: "partner",
-      avatarColor: "bg-purple-500",
-    };
-
-    onLogin(user);
+    onLogin(toAppUser(authUser, null));
   };
 
   return (
@@ -75,6 +67,9 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                 className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-primary focus:ring-2 focus:ring-pink-100 outline-none transition-all text-slate-700 placeholder:text-slate-300"
                 placeholder="admin@example.com"
                 autoComplete="email"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
               />
             </div>
 

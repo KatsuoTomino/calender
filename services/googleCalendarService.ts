@@ -345,14 +345,29 @@ export function getGoogleExportedTodoIds(): Set<string> {
 }
 
 /**
- * Clear the local "already exported" mark for one todo so it can be
- * exported again. Does not delete the event on Google Calendar.
+ * Set or clear the local "already exported / skip" mark for one todo.
+ * Does not create or delete events on Google Calendar.
+ * Manual check uses a placeholder id so the next Gカレ export skips it.
  */
-export function clearGoogleCalendarExportMark(todoId: string): void {
+export function setGoogleCalendarExportMark(
+  todoId: string,
+  marked: boolean
+): void {
   const map = loadExportMap();
-  if (!map[todoId]) return;
-  delete map[todoId];
+  if (marked) {
+    if (!map[todoId]) {
+      map[todoId] = "local-mark";
+    }
+  } else {
+    if (!map[todoId]) return;
+    delete map[todoId];
+  }
   saveExportMap(map);
+}
+
+/** Clear the local mark for one todo (same as setGoogleCalendarExportMark(id, false)). */
+export function clearGoogleCalendarExportMark(todoId: string): void {
+  setGoogleCalendarExportMark(todoId, false);
 }
 
 /** Clear local export cache so the next export is not skipped. */

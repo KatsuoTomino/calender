@@ -4,10 +4,10 @@ import { generateId } from "../services/storageService";
 import { uploadImageToR2, getImageUrl, deleteImageFromR2 } from "../services/r2Service";
 import { logger } from "../services/logger";
 import {
-  clearGoogleCalendarExportMark,
   exportTodosToGoogleCalendar,
   getGoogleExportedTodoIds,
   isGoogleCalendarConfigured,
+  setGoogleCalendarExportMark,
 } from "../services/googleCalendarService";
 import Button from "./Button";
 
@@ -613,8 +613,8 @@ const TodoList: React.FC<TodoListProps> = ({
   };
 
   const handleToggleGoogleExportMark = (todoId: string) => {
-    if (!googleExportedIds.has(todoId)) return;
-    clearGoogleCalendarExportMark(todoId);
+    const next = !googleExportedIds.has(todoId);
+    setGoogleCalendarExportMark(todoId, next);
     setGoogleExportTick((n) => n + 1);
   };
 
@@ -849,21 +849,16 @@ const TodoList: React.FC<TodoListProps> = ({
                     <button
                       type="button"
                       onClick={() => handleToggleGoogleExportMark(todo.id)}
-                      disabled={!googleExportedIds.has(todo.id)}
-                      className={`shrink-0 mt-0.5 inline-flex flex-col items-center gap-0.5 min-w-[2.25rem] ${
-                        googleExportedIds.has(todo.id)
-                          ? "cursor-pointer"
-                          : "cursor-default opacity-60"
-                      }`}
+                      className="shrink-0 mt-0.5 inline-flex flex-col items-center gap-0.5 min-w-[2.25rem] cursor-pointer"
                       title={
                         googleExportedIds.has(todo.id)
-                          ? "Gカレのチェックを外す（再追加できるようになります）"
-                          : "Gカレ未追加"
+                          ? "Gカレのチェックを外す（次回の追加対象になります）"
+                          : "Gカレにチェックを付ける（次回の追加から除外）"
                       }
                       aria-label={
                         googleExportedIds.has(todo.id)
                           ? "Gカレ追加済み。クリックでチェックを外す"
-                          : "Gカレ未追加"
+                          : "Gカレ未追加。クリックでチェックを付ける"
                       }
                       aria-pressed={googleExportedIds.has(todo.id)}
                     >
@@ -874,7 +869,7 @@ const TodoList: React.FC<TodoListProps> = ({
                         className={`inline-flex items-center justify-center w-5 h-5 rounded border-2 transition-colors ${
                           googleExportedIds.has(todo.id)
                             ? "bg-teal-500 border-teal-500 text-white hover:bg-teal-600"
-                            : "border-slate-300 bg-white"
+                            : "border-slate-300 bg-white hover:border-teal-400"
                         }`}
                       >
                         {googleExportedIds.has(todo.id) && (

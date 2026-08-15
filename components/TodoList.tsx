@@ -1,11 +1,13 @@
 import React, { useState, useRef, useEffect } from "react";
 import { TodoItem, User, DateColor, DateColorType } from "../types";
 import { generateId } from "../services/storageService";
+import { planLinkedTodoDelete } from "../utils/linkedTodoDelete";
 import { uploadImageToR2, getImageUrl, deleteImageFromR2 } from "../services/r2Service";
 import { logger } from "../services/logger";
 import {
   clearGoogleCalendarLink,
   deleteTodoFromGoogleCalendar,
+  ensureGoogleCalendarAccess,
   exportTodosToGoogleCalendar,
   GoogleImportCandidate,
   hasGoogleCalendarEvent,
@@ -23,7 +25,7 @@ interface TodoListProps {
   todos: TodoItem[];
   onAddTodo: (todo: TodoItem) => void;
   onToggleTodo: (id: string) => void;
-  onDeleteTodo: (id: string) => void;
+  onDeleteTodo: (id: string) => void | Promise<boolean>;
   onUpdateTodoImages: (id: string, imageUrls: string[] | null) => void;
   onGoogleMarkChange?: (
     id: string,
@@ -543,38 +545,37 @@ const TodoList: React.FC<TodoListProps> = ({
   ) => {
     const todo = todos.find((t) => t.id === todoId);
     const hadGoogleEvent = hasGoogleCalendarEvent(todo);
+    const googleEventId = todo?.googleEventId;
+    const plan = planLinkedTodoDelete({
+      alsoDeleteFromGoogle: options.alsoDeleteFromGoogle,
+      hasGoogleEvent: hadGoogleEvent,
+    });
     closeConfirmModal();
     setIsDeleting(true);
 
     try {
-      if (options.alsoDeleteFromGoogle && hadGoogleEvent) {
+      // Token first so a mobile OAuth redirect cannot leave Google already
+      // deleted (or the app row already gone). Nothing is destroyed yet.
+      if (plan.requireGoogleAccess) {
         try {
-          const result = await deleteTodoFromGoogleCalendar(
-            todoId,
-            todo?.googleEventId
-          );
-          if (result.deleted) {
-            onGoogleMarkChange?.(todoId, {
-              googleEventId: null,
-              googleChecked: false,
-            });
-          }
+          await ensureGoogleCalendarAccess();
         } catch (error) {
-          logger.error("Google Calendar delete error:", error);
+          logger.error("Google Calendar auth error:", error);
           showToast(
             error instanceof Error
               ? error.message
-              : "Gカレからの削除に失敗したため、タスクは残しています",
+              : "Google認証に失敗したため、タスクは残しています",
             "error"
           );
           return;
         }
-      } else {
-        await clearGoogleCalendarLink(todoId);
-        onGoogleMarkChange?.(todoId, {
-          googleEventId: null,
-          googleChecked: false,
-        });
+      }
+
+      // App row must be gone before we delete the linked Google event.
+      // Imported todos point at the user's original Calendar events.
+      const deleted = await onDeleteTodo(todoId);
+      if (deleted === false) {
+        return;
       }
 
       if (todo?.imageUrls && todo.imageUrls.length > 0) {
@@ -587,9 +588,35 @@ const TodoList: React.FC<TodoListProps> = ({
         }
       }
 
-      onDeleteTodo(todoId);
+      if (plan.deleteGoogleEvent) {
+        try {
+          const result = await deleteTodoFromGoogleCalendar(todoId, googleEventId);
+          if (result.deleted) {
+            onGoogleMarkChange?.(todoId, {
+              googleEventId: null,
+              googleChecked: false,
+            });
+          }
+        } catch (error) {
+          logger.error("Google Calendar delete error:", error);
+          showToast(
+            error instanceof Error
+              ? error.message
+              : "タスクは削除しましたが、Googleカレンダーの予定を削除できませんでした",
+            "error"
+          );
+          return;
+        }
+      } else if (plan.clearLinkOnly) {
+        await clearGoogleCalendarLink(todoId);
+        onGoogleMarkChange?.(todoId, {
+          googleEventId: null,
+          googleChecked: false,
+        });
+      }
+
       showToast(
-        options.alsoDeleteFromGoogle && hadGoogleEvent
+        plan.deleteGoogleEvent
           ? "タスクとGカレの予定を削除しました"
           : "タスクを削除しました"
       );

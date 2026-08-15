@@ -530,7 +530,7 @@ const TodoList: React.FC<TodoListProps> = ({
 
     setIsExportingToGoogle(true);
     try {
-      const result = await exportTodosToGoogleCalendar(todos);
+      const result = await exportTodosToGoogleCalendar(todos, dateColors);
       if (result.created > 0 && result.failed === 0) {
         const skipNote =
           result.skipped > 0 ? `（スキップ ${result.skipped}件）` : "";

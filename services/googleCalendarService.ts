@@ -5,13 +5,30 @@
  * - https://developers.google.com/calendar/api/v3/reference/events/insert
  */
 
-import { TodoItem } from "../types";
+import { TodoItem, DateColor, DateColorType } from "../types";
 import { logger } from "./logger";
 
 const GIS_SCRIPT_SRC = "https://accounts.google.com/gsi/client";
 const CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar.events";
 const EXPORT_STORAGE_KEY = "kizuna_google_calendar_exports";
 const CONNECTED_FLAG_KEY = "kizuna_google_calendar_connected";
+
+/**
+ * Map Tomy's date cell colors to Google Calendar event colorId.
+ * Palette: https://developers.google.com/calendar/api/v3/reference/colors
+ * Common event IDs: 1 Lavender, 2 Sage, 3 Grape, 4 Flamingo, 5 Banana,
+ * 6 Tangerine, 7 Peacock, 8 Graphite, 9 Blueberry, 10 Basil, 11 Tomato
+ */
+const DATE_COLOR_TO_GOOGLE_EVENT_ID: Record<
+  Exclude<DateColorType, null>,
+  string
+> = {
+  red: "11", // Tomato
+  yellow: "5", // Banana
+  blue: "9", // Blueberry
+  green: "10", // Basil
+  purple: "3", // Grape
+};
 
 type TokenClient = {
   requestAccessToken: (overrideConfig?: { prompt?: string }) => void;
@@ -185,9 +202,10 @@ function requestAccessToken(): Promise<string> {
 
 async function insertAllDayEvent(
   accessToken: string,
-  todo: TodoItem
+  todo: TodoItem,
+  colorId?: string
 ): Promise<string> {
-  const body = {
+  const body: Record<string, unknown> = {
     summary: todo.text,
     description: todo.completed
       ? "Kizuna Calendar からエクスポート（完了済み）"
@@ -199,9 +217,15 @@ async function insertAllDayEvent(
       private: {
         kizunaTodoId: todo.id,
         source: "kizuna-calendar",
+        ...(colorId ? { kizunaDateColor: colorId } : {}),
       },
     },
   };
+
+  // Event color: https://developers.google.com/calendar/api/v3/reference/events
+  if (colorId) {
+    body.colorId = colorId;
+  }
 
   const res = await fetch(
     "https://www.googleapis.com/calendar/v3/calendars/primary/events",
@@ -227,12 +251,24 @@ async function insertAllDayEvent(
   return data.id;
 }
 
+function resolveGoogleColorId(
+  dateStr: string,
+  dateColors: DateColor[]
+): string | undefined {
+  const entry = dateColors.find((dc) => dc.dateStr === dateStr);
+  const color = entry?.color;
+  if (!color) return undefined;
+  return DATE_COLOR_TO_GOOGLE_EVENT_ID[color];
+}
+
 /**
  * Export date-based todos to the signed-in user's primary Google Calendar
  * as all-day events. Skips todos already exported from this browser.
+ * When dateColors are provided, event colorId approximates the day color.
  */
 export async function exportTodosToGoogleCalendar(
-  todos: TodoItem[]
+  todos: TodoItem[],
+  dateColors: DateColor[] = []
 ): Promise<GoogleExportResult> {
   const targets = todos.filter(isDateTask);
   const result: GoogleExportResult = {
@@ -256,7 +292,8 @@ export async function exportTodosToGoogleCalendar(
     }
 
     try {
-      const eventId = await insertAllDayEvent(accessToken, todo);
+      const colorId = resolveGoogleColorId(todo.dateStr, dateColors);
+      const eventId = await insertAllDayEvent(accessToken, todo, colorId);
       exportMap[todo.id] = eventId;
       saveExportMap(exportMap);
       result.created += 1;

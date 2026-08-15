@@ -769,6 +769,7 @@ const App: React.FC = () => {
                 onUpdateTodoImages={handleUpdateTodoImages}
                 currentUser={user}
                 onClose={() => setShowMonthSchedulePanel(false)}
+                dateColors={dateColors}
                 showGoogleExport
                 hideAddForm
                 showTodoDates
@@ -790,6 +791,7 @@ const App: React.FC = () => {
                 onUpdateTodoImages={handleUpdateTodoImages}
                 currentUser={user}
                 onClose={() => setShowMonthSchedulePanel(false)}
+                dateColors={dateColors}
                 showGoogleExport
                 hideAddForm
                 showTodoDates

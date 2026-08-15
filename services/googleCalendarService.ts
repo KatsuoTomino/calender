@@ -330,6 +330,31 @@ export async function exportTodosToGoogleCalendar(
   return result;
 }
 
+/** Whether this todo was exported to Google Calendar from this browser. */
+export function isTodoExportedToGoogle(todoId: string): boolean {
+  const map = loadExportMap();
+  return Boolean(map[todoId]);
+}
+
+/** Todo IDs that have already been exported (excludes legacy bg: keys). */
+export function getGoogleExportedTodoIds(): Set<string> {
+  const map = loadExportMap();
+  return new Set(
+    Object.keys(map).filter((key) => !key.startsWith("bg:"))
+  );
+}
+
+/**
+ * Clear the local "already exported" mark for one todo so it can be
+ * exported again. Does not delete the event on Google Calendar.
+ */
+export function clearGoogleCalendarExportMark(todoId: string): void {
+  const map = loadExportMap();
+  if (!map[todoId]) return;
+  delete map[todoId];
+  saveExportMap(map);
+}
+
 /** Clear local export cache so the next export is not skipped. */
 export function clearGoogleCalendarExportHistory(): void {
   localStorage.removeItem(EXPORT_STORAGE_KEY);

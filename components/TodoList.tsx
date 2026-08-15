@@ -4,7 +4,9 @@ import { generateId } from "../services/storageService";
 import { uploadImageToR2, getImageUrl, deleteImageFromR2 } from "../services/r2Service";
 import { logger } from "../services/logger";
 import {
+  clearGoogleCalendarExportMark,
   exportTodosToGoogleCalendar,
+  getGoogleExportedTodoIds,
   isGoogleCalendarConfigured,
 } from "../services/googleCalendarService";
 import Button from "./Button";
@@ -37,6 +39,8 @@ interface ConfirmModalState {
   title: string;
   message: string;
   onConfirm: () => void;
+  confirmLabel: string;
+  confirmBusyLabel: string;
 }
 
 // 通知トーストの型
@@ -202,6 +206,8 @@ const TodoList: React.FC<TodoListProps> = ({
     title: "",
     message: "",
     onConfirm: () => {},
+    confirmLabel: "削除する",
+    confirmBusyLabel: "削除中...",
   });
   const [toast, setToast] = useState<ToastState>({
     isVisible: false,
@@ -210,6 +216,8 @@ const TodoList: React.FC<TodoListProps> = ({
   });
   const [isDeleting, setIsDeleting] = useState(false);
   const [isExportingToGoogle, setIsExportingToGoogle] = useState(false);
+  /** Bump after export so Google checkmarks re-read localStorage. */
+  const [googleExportTick, setGoogleExportTick] = useState(0);
 
   const inputRef = useRef<HTMLInputElement>(null);
   const todoFileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
@@ -296,9 +304,17 @@ const TodoList: React.FC<TodoListProps> = ({
   const showConfirmModal = (
     title: string,
     message: string,
-    onConfirm: () => void
+    onConfirm: () => void,
+    options?: { confirmLabel?: string; confirmBusyLabel?: string }
   ) => {
-    setConfirmModal({ isOpen: true, title, message, onConfirm });
+    setConfirmModal({
+      isOpen: true,
+      title,
+      message,
+      onConfirm,
+      confirmLabel: options?.confirmLabel ?? "削除する",
+      confirmBusyLabel: options?.confirmBusyLabel ?? "削除中...",
+    });
   };
 
   const closeConfirmModal = () => {
@@ -511,10 +527,25 @@ const TodoList: React.FC<TodoListProps> = ({
     );
   };
 
-  const runGoogleExport = async (force = false) => {
+  const canShowGoogleExport =
+    showGoogleExport || (Boolean(date) && !dateStr);
+
+  // Re-read export map when tick / todos change (localStorage is source of truth).
+  void googleExportTick;
+  const googleExportedIds = getGoogleExportedTodoIds();
+  const pendingGoogleTodos = todos.filter(
+    (t) => /^\d{4}-\d{2}-\d{2}$/.test(t.dateStr) && !googleExportedIds.has(t.id)
+  );
+
+  const runGoogleExport = async () => {
     setIsExportingToGoogle(true);
     try {
-      const result = await exportTodosToGoogleCalendar(todos, { force });
+      // Only unchecked (not yet exported) todos.
+      const result = await exportTodosToGoogleCalendar(pendingGoogleTodos, {
+        force: false,
+      });
+      setGoogleExportTick((n) => n + 1);
+
       if (result.cleanedBackgrounds && result.cleanedBackgrounds > 0) {
         showToast(
           `以前の「背景色」予定を ${result.cleanedBackgrounds}件削除しました`
@@ -522,9 +553,9 @@ const TodoList: React.FC<TodoListProps> = ({
       }
       if (result.created > 0 && result.failed === 0) {
         const skipNote =
-          result.skipped > 0 ? `（スキップ ${result.skipped}件）` : "";
+          result.skipped > 0 ? `（追加済み ${result.skipped}件はスキップ）` : "";
         showToast(
-          `Googleカレンダーに ${result.created}件追加しました${skipNote}`
+          `Gカレに ${result.created}件追加しました${skipNote}`
         );
       } else if (result.created > 0) {
         showToast(
@@ -532,27 +563,14 @@ const TodoList: React.FC<TodoListProps> = ({
           "error"
         );
       } else if (result.skipped > 0 && result.failed === 0) {
-        if (result.cleanedBackgrounds && result.cleanedBackgrounds > 0) {
-          showToast(
-            `「背景色」予定を整理しました。タスクは追加済みのためスキップしました`
-          );
-        } else {
-          showConfirmModal(
-            "すでに追加済みです",
-            "この内容は以前このブラウザからGoogleカレンダーへ追加済みのためスキップされました。\nもう一度追加しますか？（Google側に同じ予定が重複する可能性があります）",
-            async () => {
-              closeConfirmModal();
-              await runGoogleExport(true);
-            }
-          );
-        }
+        showToast("Gカレへすべて追加済みです");
       } else if (result.cleanedBackgrounds && result.cleanedBackgrounds > 0) {
         showToast(
           `以前の「背景色」予定を ${result.cleanedBackgrounds}件削除しました`
         );
       } else {
         showToast(
-          result.errors[0] || "Googleカレンダーへの追加に失敗しました",
+          result.errors[0] || "Gカレへの追加に失敗しました",
           "error"
         );
       }
@@ -561,7 +579,7 @@ const TodoList: React.FC<TodoListProps> = ({
       showToast(
         error instanceof Error
           ? error.message
-          : "Googleカレンダーへの追加に失敗しました",
+          : "Gカレへの追加に失敗しました",
         "error"
       );
     } finally {
@@ -581,16 +599,24 @@ const TodoList: React.FC<TodoListProps> = ({
       return;
     }
 
-    if (todos.length === 0) {
-      showToast("追加するタスクがありません", "error");
+    if (pendingGoogleTodos.length === 0) {
+      showToast(
+        todos.length === 0
+          ? "追加するタスクがありません"
+          : "未追加のタスクはありません（Gカレの ✓ は追加済み。外すと再追加できます）",
+        "error"
+      );
       return;
     }
 
-    await runGoogleExport(false);
+    await runGoogleExport();
   };
 
-  const canShowGoogleExport =
-    showGoogleExport || (Boolean(date) && !dateStr);
+  const handleToggleGoogleExportMark = (todoId: string) => {
+    if (!googleExportedIds.has(todoId)) return;
+    clearGoogleCalendarExportMark(todoId);
+    setGoogleExportTick((n) => n + 1);
+  };
 
   const formatTodoDateLabel = (value: string): string => {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
@@ -625,16 +651,16 @@ const TodoList: React.FC<TodoListProps> = ({
               <button
                 type="button"
                 onClick={handleExportToGoogleCalendar}
-                disabled={isExportingToGoogle}
+                disabled={isExportingToGoogle || pendingGoogleTodos.length === 0}
                 className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] sm:text-xs font-medium text-slate-700 bg-teal-50 border border-teal-200 hover:bg-teal-100 hover:border-teal-300 disabled:opacity-50 disabled:cursor-not-allowed active:scale-95 transition-all touch-manipulation"
                 title={
                   todos.length === 0
                     ? "この期間にタスクがありません。先にタスクを追加してください"
-                    : showGoogleExport
-                      ? "表示中のタスクをすべてGoogleカレンダーに追加"
-                      : "この日のタスクをGoogleカレンダーに追加"
+                    : pendingGoogleTodos.length === 0
+                      ? "Gカレへすべて追加済みです（✓ を外すと再追加できます）"
+                      : `Gカレ未追加 ${pendingGoogleTodos.length}件をGoogleカレンダーに追加`
                 }
-                aria-label="Googleカレンダーに追加"
+                aria-label="Gカレに未追加のタスクを追加"
               >
                 <svg
                   className="w-3.5 h-3.5 text-teal-600 shrink-0"
@@ -652,10 +678,10 @@ const TodoList: React.FC<TodoListProps> = ({
                 </svg>
                 <span className="whitespace-nowrap">
                   {isExportingToGoogle
-                    ? "追加中…"
-                    : showGoogleExport
-                      ? "月をGoogleに追加"
-                      : "Googleに追加"}
+                    ? "Gカレ追加中…"
+                    : pendingGoogleTodos.length === 0
+                      ? "Gカレ 追加済み"
+                      : `Gカレ (${pendingGoogleTodos.length})`}
                 </span>
               </button>
             )}
@@ -811,7 +837,7 @@ const TodoList: React.FC<TodoListProps> = ({
                     </span>
                   )}
                   <span
-                    className={`text-sm ${
+                    className={`text-sm flex-1 min-w-0 ${
                       todo.completed
                         ? "line-through text-slate-400"
                         : "text-slate-700"
@@ -819,6 +845,57 @@ const TodoList: React.FC<TodoListProps> = ({
                   >
                     {linkifyText(todo.text)}
                   </span>
+                  {canShowGoogleExport && (
+                    <button
+                      type="button"
+                      onClick={() => handleToggleGoogleExportMark(todo.id)}
+                      disabled={!googleExportedIds.has(todo.id)}
+                      className={`shrink-0 mt-0.5 inline-flex flex-col items-center gap-0.5 min-w-[2.25rem] ${
+                        googleExportedIds.has(todo.id)
+                          ? "cursor-pointer"
+                          : "cursor-default opacity-60"
+                      }`}
+                      title={
+                        googleExportedIds.has(todo.id)
+                          ? "Gカレのチェックを外す（再追加できるようになります）"
+                          : "Gカレ未追加"
+                      }
+                      aria-label={
+                        googleExportedIds.has(todo.id)
+                          ? "Gカレ追加済み。クリックでチェックを外す"
+                          : "Gカレ未追加"
+                      }
+                      aria-pressed={googleExportedIds.has(todo.id)}
+                    >
+                      <span className="text-[9px] font-medium leading-none text-teal-700">
+                        Gカレ
+                      </span>
+                      <span
+                        className={`inline-flex items-center justify-center w-5 h-5 rounded border-2 transition-colors ${
+                          googleExportedIds.has(todo.id)
+                            ? "bg-teal-500 border-teal-500 text-white hover:bg-teal-600"
+                            : "border-slate-300 bg-white"
+                        }`}
+                      >
+                        {googleExportedIds.has(todo.id) && (
+                          <svg
+                            className="w-3 h-3"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                            aria-hidden="true"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={3}
+                              d="M5 13l4 4L19 7"
+                            />
+                          </svg>
+                        )}
+                      </span>
+                    </button>
+                  )}
                 </div>
                 {/* 画像一覧と追加ボタン */}
                 <div className="mt-1 flex flex-col gap-2">
@@ -1090,7 +1167,9 @@ const TodoList: React.FC<TodoListProps> = ({
                 disabled={isDeleting}
                 className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors disabled:opacity-50"
               >
-                {isDeleting ? "削除中..." : "削除する"}
+                {isDeleting
+                  ? confirmModal.confirmBusyLabel
+                  : confirmModal.confirmLabel}
               </button>
             </div>
           </div>

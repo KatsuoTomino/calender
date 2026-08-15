@@ -17,6 +17,19 @@ const CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar.events";
 const EXPORT_STORAGE_KEY = "kizuna_google_calendar_exports";
 const CONNECTED_FLAG_KEY = "kizuna_google_calendar_connected";
 const LOCAL_MARK_EVENT_ID = "local-mark";
+/** Prefix when user unchecked Gカレ but we still keep the real event id. */
+const SKIP_PREFIX = "skip:";
+
+function resolveStoredEventId(raw: string | undefined): string | null {
+  if (!raw || raw === LOCAL_MARK_EVENT_ID || raw.startsWith("bg:")) return null;
+  const id = raw.startsWith(SKIP_PREFIX) ? raw.slice(SKIP_PREFIX.length) : raw;
+  if (!id || id === LOCAL_MARK_EVENT_ID || id.startsWith("bg:")) return null;
+  return id;
+}
+
+function isCheckedExportValue(raw: string | undefined): boolean {
+  return Boolean(raw && !raw.startsWith(SKIP_PREFIX) && !raw.startsWith("bg:"));
+}
 
 type TokenClient = {
   requestAccessToken: (overrideConfig?: { prompt?: string }) => void;
@@ -314,7 +327,8 @@ export async function exportTodosToGoogleCalendar(
   );
 
   for (const todo of targets) {
-    if (!force && exportMap[todo.id]) {
+    // Unchecked (skip:*) entries are eligible for export again.
+    if (!force && isCheckedExportValue(exportMap[todo.id])) {
       result.skipped += 1;
       continue;
     }
@@ -430,9 +444,9 @@ export async function listGoogleCalendarEventsToImport(
   );
   const exportMap = loadExportMap();
   const linkedEventIds = new Set(
-    Object.values(exportMap).filter(
-      (id) => id && id !== LOCAL_MARK_EVENT_ID && !id.startsWith("bg:")
-    )
+    Object.values(exportMap)
+      .map((id) => resolveStoredEventId(id))
+      .filter((id): id is string => Boolean(id))
   );
 
   const existingKeys = new Set(
@@ -529,27 +543,24 @@ export function linkTodoToGoogleEvent(todoId: string, eventId: string): void {
   saveExportMap(map);
 }
 
-/** Whether this todo was exported to Google Calendar from this browser. */
+/** Whether the Gカレ checkbox is on for this todo. */
 export function isTodoExportedToGoogle(todoId: string): boolean {
-  const map = loadExportMap();
-  return Boolean(map[todoId]);
+  return isCheckedExportValue(loadExportMap()[todoId]);
 }
 
-/** Todo IDs that have already been exported (excludes legacy bg: keys). */
+/** Todo IDs with Gカレ checkbox on (excludes unchecked skip:* and bg: keys). */
 export function getGoogleExportedTodoIds(): Set<string> {
   const map = loadExportMap();
   return new Set(
-    Object.keys(map).filter((key) => !key.startsWith("bg:"))
+    Object.entries(map)
+      .filter(([key, value]) => !key.startsWith("bg:") && isCheckedExportValue(value))
+      .map(([key]) => key)
   );
 }
 
-/** Real Google event id if this todo was exported (not a manual local-only mark). */
+/** Real Google event id (kept even when Gカレ is unchecked). */
 export function getGoogleCalendarEventId(todoId: string): string | null {
-  const eventId = loadExportMap()[todoId];
-  if (!eventId || eventId === LOCAL_MARK_EVENT_ID || eventId.startsWith("bg:")) {
-    return null;
-  }
-  return eventId;
+  return resolveStoredEventId(loadExportMap()[todoId]);
 }
 
 export function hasGoogleCalendarEvent(todoId: string): boolean {
@@ -564,13 +575,14 @@ export async function deleteTodoFromGoogleCalendar(
   todoId: string
 ): Promise<{ deleted: boolean; skipped: boolean }> {
   const exportMap = loadExportMap();
-  const eventId = exportMap[todoId];
+  const raw = exportMap[todoId];
+  const eventId = resolveStoredEventId(raw);
 
-  if (!eventId) {
+  if (!raw) {
     return { deleted: false, skipped: true };
   }
 
-  if (eventId === LOCAL_MARK_EVENT_ID) {
+  if (!eventId) {
     delete exportMap[todoId];
     saveExportMap(exportMap);
     return { deleted: false, skipped: true };
@@ -587,23 +599,45 @@ export async function deleteTodoFromGoogleCalendar(
 }
 
 /**
- * Set or clear the local "already exported / skip" mark for one todo.
- * Does not create or delete events on Google Calendar.
- * Manual check uses a placeholder id so the next Gカレ export skips it.
+ * Set or clear the Gカレ checkbox.
+ * Unchecking keeps the real Google event id (as skip:*) so a later delete
+ * can still remove it from Google when checked again / for re-export.
+ * Does not create or delete events on Google Calendar by itself.
  */
 export function setGoogleCalendarExportMark(
   todoId: string,
   marked: boolean
 ): void {
   const map = loadExportMap();
+  const current = map[todoId];
+
   if (marked) {
-    if (!map[todoId]) {
+    if (!current) {
       map[todoId] = LOCAL_MARK_EVENT_ID;
+    } else if (current.startsWith(SKIP_PREFIX)) {
+      map[todoId] = current.slice(SKIP_PREFIX.length);
     }
   } else {
-    if (!map[todoId]) return;
-    delete map[todoId];
+    if (!current) return;
+    if (current === LOCAL_MARK_EVENT_ID) {
+      delete map[todoId];
+    } else if (!current.startsWith(SKIP_PREFIX)) {
+      const realId = resolveStoredEventId(current);
+      if (realId) {
+        map[todoId] = SKIP_PREFIX + realId;
+      } else {
+        delete map[todoId];
+      }
+    }
   }
+  saveExportMap(map);
+}
+
+/** Remove all local Google link/mark for a todo (does not call Google API). */
+export function clearGoogleCalendarLink(todoId: string): void {
+  const map = loadExportMap();
+  if (!map[todoId]) return;
+  delete map[todoId];
   saveExportMap(map);
 }
 

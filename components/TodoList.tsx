@@ -4,12 +4,14 @@ import { generateId } from "../services/storageService";
 import { uploadImageToR2, getImageUrl, deleteImageFromR2 } from "../services/r2Service";
 import { logger } from "../services/logger";
 import {
+  clearGoogleCalendarLink,
   deleteTodoFromGoogleCalendar,
   exportTodosToGoogleCalendar,
   getGoogleExportedTodoIds,
   GoogleImportCandidate,
   hasGoogleCalendarEvent,
   isGoogleCalendarConfigured,
+  isTodoExportedToGoogle,
   linkTodoToGoogleEvent,
   listGoogleCalendarEventsToImport,
   setGoogleCalendarExportMark,
@@ -561,8 +563,8 @@ const TodoList: React.FC<TodoListProps> = ({
           return;
         }
       } else {
-        // Clear local Gカレ mark even when keeping the Google event
-        setGoogleCalendarExportMark(todoId, false);
+        // Drop local link entirely (keep Google event if any)
+        clearGoogleCalendarLink(todoId);
         setGoogleExportTick((n) => n + 1);
       }
 
@@ -589,22 +591,20 @@ const TodoList: React.FC<TodoListProps> = ({
 
   const handleDeleteTodo = (todoId: string) => {
     const todo = todos.find((t) => t.id === todoId);
-    const linkedToGoogle = hasGoogleCalendarEvent(todoId);
+    // GカレチェックON + 実イベントあり → 必ず両方削除
+    const gCalChecked = isTodoExportedToGoogle(todoId);
+    const canDeleteFromGoogle = hasGoogleCalendarEvent(todoId);
 
-    if (linkedToGoogle) {
+    if (gCalChecked && canDeleteFromGoogle) {
       showConfirmModal(
         "タスクを削除",
-        `「${todo?.text || "このタスク"}」を削除しますか？\n\nGカレにも予定があります。Googleカレンダーからも削除しますか？`,
+        `「${todo?.text || "このタスク"}」を削除しますか？\n\nGカレにチェックがあるため、Googleカレンダーの予定も削除します。`,
         () => {
           void performDeleteTodo(todoId, { alsoDeleteFromGoogle: true });
         },
         {
           confirmLabel: "両方削除",
           confirmBusyLabel: "削除中...",
-          secondaryLabel: "アプリのみ",
-          onSecondary: () => {
-            void performDeleteTodo(todoId, { alsoDeleteFromGoogle: false });
-          },
         }
       );
       return;

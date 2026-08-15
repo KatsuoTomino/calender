@@ -93,9 +93,15 @@ export function consumeGoogleOAuthRedirect(): {
   error?: string;
 } {
   if (typeof window === "undefined") return { ok: false };
-  const hash = window.location.hash.startsWith("#")
+  const fromUrl = window.location.hash.startsWith("#")
     ? window.location.hash.slice(1)
     : "";
+  const stored = sessionStorage.getItem("kizuna_google_oauth_hash") || "";
+  const hash = fromUrl.includes("access_token=") || fromUrl.includes("error=")
+    ? fromUrl
+    : stored;
+  sessionStorage.removeItem("kizuna_google_oauth_hash");
+
   if (!hash.includes("access_token=") && !hash.includes("error=")) {
     return { ok: false };
   }

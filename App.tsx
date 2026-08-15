@@ -325,10 +325,18 @@ const App: React.FC = () => {
   };
 
   const handleLogout = async () => {
-    await signOut();
-    localStorage.removeItem("kizuna_user");
     setUser(null);
     setTodos([]);
+    setAvatarImageUrl(null);
+    localStorage.removeItem("kizuna_user");
+    try {
+      await Promise.race([
+        signOut(),
+        new Promise<void>((resolve) => window.setTimeout(resolve, 3000)),
+      ]);
+    } catch (error) {
+      logger.error("ログアウトエラー:", error);
+    }
   };
 
   const handleMonthChange = (offset: number) => {
@@ -528,8 +536,8 @@ const App: React.FC = () => {
         </div>
       )}
       {/* App Header */}
-      <header className="bg-white/80 backdrop-blur-md border-b border-slate-200 p-4 flex justify-between items-center z-20 shrink-0">
-        <div className="flex items-center gap-3 flex-1">
+      <header className="bg-white/80 backdrop-blur-md border-b border-slate-200 p-4 flex justify-between items-center z-20 shrink-0 gap-2 overflow-hidden">
+        <div className="flex items-center gap-3 flex-1 min-w-0">
           <input
             type="file"
             accept="image/*"
@@ -623,8 +631,11 @@ const App: React.FC = () => {
           </div>
         </div>
         <button
-          onClick={handleLogout}
-          className="text-xs text-slate-400 hover:text-slate-600 underline ml-4 shrink-0"
+          type="button"
+          onClick={() => {
+            void handleLogout();
+          }}
+          className="relative z-30 text-xs text-slate-400 hover:text-slate-600 underline ml-4 shrink-0"
         >
           ログアウト
         </button>

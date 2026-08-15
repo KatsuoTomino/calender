@@ -16,9 +16,146 @@ const GIS_SCRIPT_SRC = "https://accounts.google.com/gsi/client";
 const CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar.events";
 const EXPORT_STORAGE_KEY = "kizuna_google_calendar_exports";
 const CONNECTED_FLAG_KEY = "kizuna_google_calendar_connected";
+const TOKEN_CACHE_KEY = "kizuna_google_access_token";
+const PENDING_AUTH_KEY = "kizuna_google_pending_action";
 const LOCAL_MARK_EVENT_ID = "local-mark";
 /** Prefix when user unchecked Gカレ but we still keep the real event id. */
 const SKIP_PREFIX = "skip:";
+
+type PendingGoogleAction = {
+  type: "export";
+  todos: TodoItem[];
+  force?: boolean;
+} | {
+  type: "auth-only";
+};
+
+function prefersRedirectAuth(): boolean {
+  if (typeof navigator === "undefined") return false;
+  return /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+}
+
+function oauthRedirectUri(): string {
+  return window.location.origin;
+}
+
+function getCachedToken(): string | null {
+  try {
+    const raw = sessionStorage.getItem(TOKEN_CACHE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as { token?: string; expiresAt?: number };
+    if (
+      typeof parsed.token === "string" &&
+      typeof parsed.expiresAt === "number" &&
+      Date.now() < parsed.expiresAt - 30_000
+    ) {
+      return parsed.token;
+    }
+  } catch {
+    /* ignore */
+  }
+  return null;
+}
+
+function saveCachedToken(token: string, expiresInSec: number) {
+  sessionStorage.setItem(
+    TOKEN_CACHE_KEY,
+    JSON.stringify({
+      token,
+      expiresAt: Date.now() + Math.max(60, expiresInSec) * 1000,
+    })
+  );
+}
+
+function stashPendingAction(action: PendingGoogleAction) {
+  sessionStorage.setItem(PENDING_AUTH_KEY, JSON.stringify(action));
+}
+
+function takePendingAction(): PendingGoogleAction | null {
+  try {
+    const raw = sessionStorage.getItem(PENDING_AUTH_KEY);
+    if (!raw) return null;
+    sessionStorage.removeItem(PENDING_AUTH_KEY);
+    return JSON.parse(raw) as PendingGoogleAction;
+  } catch {
+    sessionStorage.removeItem(PENDING_AUTH_KEY);
+    return null;
+  }
+}
+
+/**
+ * Read access_token from an OAuth implicit redirect hash.
+ * Docs: https://developers.google.com/identity/protocols/oauth2/javascript-implicit-flow
+ */
+export function consumeGoogleOAuthRedirect(): {
+  ok: boolean;
+  error?: string;
+} {
+  if (typeof window === "undefined") return { ok: false };
+  const hash = window.location.hash.startsWith("#")
+    ? window.location.hash.slice(1)
+    : "";
+  if (!hash.includes("access_token=") && !hash.includes("error=")) {
+    return { ok: false };
+  }
+
+  const params = new URLSearchParams(hash);
+  const error = params.get("error");
+  const token = params.get("access_token");
+  const expiresIn = Number(params.get("expires_in") || "3600");
+
+  history.replaceState(
+    null,
+    "",
+    window.location.pathname + window.location.search
+  );
+
+  if (error) {
+    if (
+      (error === "interaction_required" ||
+        error === "login_required" ||
+        error === "consent_required") &&
+      sessionStorage.getItem("kizuna_google_force_consent") !== "1"
+    ) {
+      sessionStorage.setItem("kizuna_google_force_consent", "1");
+      startImplicitRedirect(true);
+    }
+    return { ok: false, error };
+  }
+  if (!token) {
+    return { ok: false, error: "token_missing" };
+  }
+
+  saveCachedToken(token, expiresIn);
+  localStorage.setItem(CONNECTED_FLAG_KEY, "1");
+  return { ok: true };
+}
+
+export async function resumePendingGoogleExport(): Promise<GoogleExportResult | null> {
+  const pending = takePendingAction();
+  if (!pending || pending.type !== "export") {
+    return null;
+  }
+  return exportTodosToGoogleCalendar(pending.todos, { force: pending.force });
+}
+
+function startImplicitRedirect(forceConsent = false) {
+  const clientId = getClientId();
+  const useConsent =
+    forceConsent || localStorage.getItem(CONNECTED_FLAG_KEY) !== "1";
+  const params = new URLSearchParams({
+    client_id: clientId,
+    redirect_uri: oauthRedirectUri(),
+    response_type: "token",
+    scope: CALENDAR_SCOPE,
+    include_granted_scopes: "true",
+    prompt: useConsent ? "consent" : "none",
+    state: "gcal",
+  });
+  window.location.assign(
+    `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`
+  );
+}
 
 function resolveStoredEventId(raw: string | undefined): string | null {
   if (!raw || raw === LOCAL_MARK_EVENT_ID || raw.startsWith("bg:")) return null;
@@ -155,6 +292,22 @@ function requestAccessToken(): Promise<string> {
     );
   }
 
+  consumeGoogleOAuthRedirect();
+  const cached = getCachedToken();
+  if (cached) {
+    return Promise.resolve(cached);
+  }
+
+  // iOS/Android: GIS popup often cannot return the token to the app.
+  // Use same-window implicit redirect instead.
+  // Docs: https://developers.google.com/identity/protocols/oauth2/javascript-implicit-flow
+  if (prefersRedirectAuth()) {
+    startImplicitRedirect();
+    return new Promise(() => {
+      /* page navigates away */
+    });
+  }
+
   return new Promise(async (resolve, reject) => {
     try {
       await loadGisScript();
@@ -191,9 +344,20 @@ function requestAccessToken(): Promise<string> {
             return;
           }
           localStorage.setItem(CONNECTED_FLAG_KEY, "1");
+          saveCachedToken(response.access_token, 3600);
           resolve(response.access_token);
         },
         error_callback: (error) => {
+          if (
+            error.type === "popup_failed_to_open" ||
+            error.type === "popup_closed"
+          ) {
+            if (!sessionStorage.getItem(PENDING_AUTH_KEY)) {
+              stashPendingAction({ type: "auth-only" });
+            }
+            startImplicitRedirect(true);
+            return;
+          }
           reject(
             new Error(error.message || error.type || "Google認証がキャンセルされました")
           );
@@ -317,6 +481,14 @@ export async function exportTodosToGoogleCalendar(
     return result;
   }
 
+  if (prefersRedirectAuth() && !getCachedToken()) {
+    stashPendingAction({
+      type: "export",
+      todos: targets,
+      force: Boolean(options.force),
+    });
+  }
+
   const accessToken = await requestAccessToken();
   const exportMap = loadExportMap();
   const force = Boolean(options.force);
@@ -437,6 +609,9 @@ export async function listGoogleCalendarEventsToImport(
   existingTodos: TodoItem[]
 ): Promise<GoogleImportListResult> {
   // Docs: https://developers.google.com/calendar/api/v3/reference/events/list
+  if (prefersRedirectAuth() && !getCachedToken()) {
+    stashPendingAction({ type: "auth-only" });
+  }
   const accessToken = await requestAccessToken();
   const { timeMin, timeMax, monthStart, monthEndExclusive } = monthTimeBounds(
     year,

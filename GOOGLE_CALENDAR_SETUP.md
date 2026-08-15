@@ -14,9 +14,12 @@
 4. **API とサービス → 認証情報 → 認証情報を作成 → OAuth クライアント ID**
    - アプリケーションの種類: **ウェブアプリケーション**
    - 承認済みの JavaScript 生成元:
-     - `http://localhost:3000`（ローカル Vite。このリポジトリの vite.config 既定）
-     - 本番 URL（例: `https://calender-indol-sigma.vercel.app`）
-   - リダイレクト URI は Token モデルでは必須ではない（空で可）
+     - `http://localhost:3000`
+     - `https://calender-indol-sigma.vercel.app`
+   - 承認済みのリダイレクト URI（**携帯では必須**）:
+     - `http://localhost:3000`
+     - `https://calender-indol-sigma.vercel.app`
+     - 末尾スラッシュありでもエラーになる場合は、あり／なしの両方を登録
 
 ## 2. 環境変数
 
@@ -36,6 +39,8 @@ VITE_GOOGLE_CLIENT_ID=あなたのクライアントID.apps.googleusercontent.co
 2. 各タスク右の **Gカレ** チェックは付け外しできます（✓ = 追加済み／次回スキップ）
 3. ヘッダーの **Gカレ (件数)** を押すと、✓ が付いていないタスクだけが追加されます
 4. Google アカウントを選び、カレンダーへのアクセスを許可
+   - 携帯では Google の画面で **許可 / 続行** まで進めてください（戻るを押すと失敗します）
+   - 未確認アプリの警告が出たら「詳細」→「（アプリ名）に移動」で進みます
 
 ### インポート（Google → アプリ）
 

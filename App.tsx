@@ -18,6 +18,10 @@ import {
 import { deleteImageFromR2, uploadAvatarToR2, getImageUrl, getAvatarFromR2 } from "./services/r2Service";
 import { fetchDateColors, setDateColor, setDateLabel, subscribeDateColorChanges } from "./services/dateColorService";
 import { logger } from "./services/logger";
+import {
+  consumeGoogleOAuthRedirect,
+  resumePendingGoogleExport,
+} from "./services/googleCalendarService";
 import Login from "./components/Login";
 import Calendar from "./components/Calendar";
 import TodoList from "./components/TodoList";
@@ -34,6 +38,8 @@ const App: React.FC = () => {
   const [showMonthSchedulePanel, setShowMonthSchedulePanel] = useState(false); // 表示月の日付タスク一覧
   const [avatarImageUrl, setAvatarImageUrl] = useState<string | null>(null); // アバター画像の表示用URL
   const [dateColors, setDateColors] = useState<DateColor[]>([]);
+  const [googleFlash, setGoogleFlash] = useState<string | null>(null);
+  const googleResumeRef = useRef(false);
   const avatarFileInputRef = useRef<HTMLInputElement>(null);
 
   // 認証状態の監視
@@ -126,6 +132,53 @@ const App: React.FC = () => {
       };
     }
   }, [user]);
+
+  // Mobile Google OAuth returns here with #access_token=...
+  useEffect(() => {
+    if (!user || googleResumeRef.current) return;
+    googleResumeRef.current = true;
+
+    const redirected = consumeGoogleOAuthRedirect();
+    if (redirected.error && redirected.error !== "interaction_required") {
+      setGoogleFlash(
+        redirected.error === "redirect_uri_mismatch"
+          ? "Google Cloud の「承認済みのリダイレクト URI」にこのサイトのURLを追加してください"
+          : "Google認証がキャンセルされたか、失敗しました"
+      );
+      return;
+    }
+    if (!redirected.ok) return;
+
+    void (async () => {
+      try {
+        const result = await resumePendingGoogleExport();
+        if (result) {
+          if (result.created > 0) {
+            setGoogleFlash(`Gカレに ${result.created}件追加しました`);
+          } else if (result.failed > 0) {
+            setGoogleFlash(result.errors[0] || "Gカレへの追加に失敗しました");
+          } else {
+            setGoogleFlash("Gカレへ追加済みです");
+          }
+        } else {
+          setGoogleFlash("Google連携できました。もう一度 Gカレ を押してください");
+        }
+      } catch (error) {
+        logger.error("Google OAuth resume error:", error);
+        setGoogleFlash(
+          error instanceof Error
+            ? error.message
+            : "Google連携の再開に失敗しました"
+        );
+      }
+    })();
+  }, [user]);
+
+  useEffect(() => {
+    if (!googleFlash) return;
+    const timer = window.setTimeout(() => setGoogleFlash(null), 5000);
+    return () => window.clearTimeout(timer);
+  }, [googleFlash]);
 
   const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -445,6 +498,11 @@ const App: React.FC = () => {
 
   return (
     <div className="h-screen w-screen bg-slate-50 flex flex-col overflow-hidden relative">
+      {googleFlash && (
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 max-w-[90vw] px-4 py-3 rounded-lg shadow-lg bg-slate-800 text-white text-sm">
+          {googleFlash}
+        </div>
+      )}
       {/* App Header */}
       <header className="bg-white/80 backdrop-blur-md border-b border-slate-200 p-4 flex justify-between items-center z-20 shrink-0">
         <div className="flex items-center gap-3 flex-1">

@@ -576,13 +576,17 @@ const TodoList: React.FC<TodoListProps> = ({
               <button
                 type="button"
                 onClick={handleExportToGoogleCalendar}
-                disabled={isExportingToGoogle || todos.length === 0}
-                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] sm:text-xs font-medium text-slate-600 bg-white border border-slate-200 hover:bg-slate-50 hover:border-slate-300 disabled:opacity-50 disabled:cursor-not-allowed active:scale-95 transition-all"
-                title="この日のタスクをGoogleカレンダーに追加"
+                disabled={isExportingToGoogle}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] sm:text-xs font-medium text-slate-700 bg-teal-50 border border-teal-200 hover:bg-teal-100 hover:border-teal-300 disabled:opacity-50 disabled:cursor-not-allowed active:scale-95 transition-all touch-manipulation"
+                title={
+                  todos.length === 0
+                    ? "この日にタスクがありません。先にタスクを追加してください"
+                    : "この日のタスクをGoogleカレンダーに追加"
+                }
                 aria-label="Googleカレンダーに追加"
               >
                 <svg
-                  className="w-3.5 h-3.5 text-teal-600"
+                  className="w-3.5 h-3.5 text-teal-600 shrink-0"
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
@@ -595,11 +599,8 @@ const TodoList: React.FC<TodoListProps> = ({
                     d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
                   />
                 </svg>
-                <span className="hidden sm:inline">
-                  {isExportingToGoogle ? "追加中…" : "Googleカレンダーに追加"}
-                </span>
-                <span className="sm:hidden">
-                  {isExportingToGoogle ? "…" : "GCal"}
+                <span className="whitespace-nowrap">
+                  {isExportingToGoogle ? "追加中…" : "Googleに追加"}
                 </span>
               </button>
             )}

@@ -3,6 +3,10 @@ import { TodoItem, User, DateColor, DateColorType } from "../types";
 import { generateId } from "../services/storageService";
 import { uploadImageToR2, getImageUrl, deleteImageFromR2 } from "../services/r2Service";
 import { logger } from "../services/logger";
+import {
+  exportTodosToGoogleCalendar,
+  isGoogleCalendarConfigured,
+} from "../services/googleCalendarService";
 import Button from "./Button";
 
 interface TodoListProps {
@@ -196,6 +200,7 @@ const TodoList: React.FC<TodoListProps> = ({
     type: "success",
   });
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isExportingToGoogle, setIsExportingToGoogle] = useState(false);
 
   const inputRef = useRef<HTMLInputElement>(null);
   const todoFileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
@@ -496,6 +501,57 @@ const TodoList: React.FC<TodoListProps> = ({
     );
   };
 
+  const handleExportToGoogleCalendar = async () => {
+    if (!date || dateStr) return;
+
+    if (!isGoogleCalendarConfigured()) {
+      showToast(
+        "Google連携が未設定です（VITE_GOOGLE_CLIENT_ID）",
+        "error"
+      );
+      return;
+    }
+
+    if (todos.length === 0) {
+      showToast("追加するタスクがありません", "error");
+      return;
+    }
+
+    setIsExportingToGoogle(true);
+    try {
+      const result = await exportTodosToGoogleCalendar(todos);
+      if (result.created > 0 && result.failed === 0) {
+        const skipNote =
+          result.skipped > 0 ? `（スキップ ${result.skipped}件）` : "";
+        showToast(
+          `Googleカレンダーに ${result.created}件追加しました${skipNote}`
+        );
+      } else if (result.created > 0) {
+        showToast(
+          `${result.created}件追加、${result.failed}件失敗`,
+          "error"
+        );
+      } else if (result.skipped > 0 && result.failed === 0) {
+        showToast("すべて追加済みです（スキップしました）");
+      } else {
+        showToast(
+          result.errors[0] || "Googleカレンダーへの追加に失敗しました",
+          "error"
+        );
+      }
+    } catch (error) {
+      logger.error("Google Calendar export error:", error);
+      showToast(
+        error instanceof Error
+          ? error.message
+          : "Googleカレンダーへの追加に失敗しました",
+        "error"
+      );
+    } finally {
+      setIsExportingToGoogle(false);
+    }
+  };
+
   const sortedTodos = [...todos].sort((a, b) => {
     if (a.completed === b.completed) return 0;
     return a.completed ? 1 : -1;
@@ -505,8 +561,8 @@ const TodoList: React.FC<TodoListProps> = ({
     <div className="h-full flex flex-col bg-white md:rounded-3xl shadow-sm overflow-hidden">
       {/* Header */}
       <div className="p-4 sm:p-6 border-b border-slate-50 bg-gradient-to-r from-white to-pink-50/30 shrink-0">
-        <div className="flex justify-between items-center">
-          <div>
+        <div className="flex justify-between items-center gap-2">
+          <div className="min-w-0">
             <h3 className="text-base sm:text-lg font-bold text-slate-800">
               {title || (date ? `${date.getMonth() + 1}月${date.getDate()}日の予定` : 'タスク')}
             </h3>
@@ -514,50 +570,84 @@ const TodoList: React.FC<TodoListProps> = ({
               {todos.filter((t) => !t.completed).length} tasks remaining
             </p>
           </div>
-        {/* モーダル表示の場合（important, shopping, monthly）は常に×ボタンを表示 */}
-        {(dateStr === 'important' || dateStr === 'shopping' || dateStr === 'monthly') && (
-          <button
-            onClick={onClose}
-            className="p-2 text-slate-400 hover:text-slate-600 active:scale-95 transition-transform"
-            aria-label="閉じる"
-          >
-            <svg
-              className="w-6 h-6"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M6 18L18 6M6 6l12 12"
-              />
-            </svg>
-          </button>
-        )}
-        {/* 日付ベースのタスクはモバイルのみ×ボタンを表示 */}
-        {!dateStr && (
-          <button
-            onClick={onClose}
-            className="md:hidden p-2 text-slate-400 hover:text-slate-600 active:scale-95 transition-transform"
-            aria-label="閉じる"
-          >
-            <svg
-              className="w-6 h-6"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M6 18L18 6M6 6l12 12"
-              />
-            </svg>
-          </button>
-        )}
+          <div className="flex items-center gap-1 shrink-0">
+            {/* 日付タスクのみ Google カレンダーへエクスポート */}
+            {!dateStr && date && (
+              <button
+                type="button"
+                onClick={handleExportToGoogleCalendar}
+                disabled={isExportingToGoogle || todos.length === 0}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] sm:text-xs font-medium text-slate-600 bg-white border border-slate-200 hover:bg-slate-50 hover:border-slate-300 disabled:opacity-50 disabled:cursor-not-allowed active:scale-95 transition-all"
+                title="この日のタスクをGoogleカレンダーに追加"
+                aria-label="Googleカレンダーに追加"
+              >
+                <svg
+                  className="w-3.5 h-3.5 text-teal-600"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                  aria-hidden="true"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
+                  />
+                </svg>
+                <span className="hidden sm:inline">
+                  {isExportingToGoogle ? "追加中…" : "Googleカレンダーに追加"}
+                </span>
+                <span className="sm:hidden">
+                  {isExportingToGoogle ? "…" : "GCal"}
+                </span>
+              </button>
+            )}
+            {/* モーダル表示の場合（important, shopping, monthly）は常に×ボタンを表示 */}
+            {(dateStr === 'important' || dateStr === 'shopping' || dateStr === 'monthly') && (
+              <button
+                onClick={onClose}
+                className="p-2 text-slate-400 hover:text-slate-600 active:scale-95 transition-transform"
+                aria-label="閉じる"
+              >
+                <svg
+                  className="w-6 h-6"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M6 18L18 6M6 6l12 12"
+                  />
+                </svg>
+              </button>
+            )}
+            {/* 日付ベースのタスクはモバイルのみ×ボタンを表示 */}
+            {!dateStr && (
+              <button
+                onClick={onClose}
+                className="md:hidden p-2 text-slate-400 hover:text-slate-600 active:scale-95 transition-transform"
+                aria-label="閉じる"
+              >
+                <svg
+                  className="w-6 h-6"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M6 18L18 6M6 6l12 12"
+                  />
+                </svg>
+              </button>
+            )}
+          </div>
         </div>
         {/* カラーピッカーとラベル入力（日付ベースのタスクのみ） */}
         {!dateStr && date && (onSetDateColor || onSetDateLabel) && (

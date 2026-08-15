@@ -108,6 +108,7 @@ npm run dev
 ## 📚 追加ドキュメント
 
 - **SECURITY.md**: セキュリティガイド詳細
+- **GOOGLE_CALENDAR_SETUP.md**: Googleカレンダーへのタスクエクスポート設定
 - **scripts/createAdminUser.ts**: 管理者作成スクリプト
 
 ---

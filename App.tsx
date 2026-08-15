@@ -438,6 +438,13 @@ const App: React.FC = () => {
       y === currentDate.getFullYear() && m === currentDate.getMonth() + 1
     );
   });
+  const calendarMonthDateColors = dateColors.filter((dc) => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dc.dateStr)) return false;
+    const [y, m] = dc.dateStr.split("-").map(Number);
+    return (
+      y === currentDate.getFullYear() && m === currentDate.getMonth() + 1
+    );
+  });
 
   if (!user) {
     return <Login onLogin={handleLogin} />;
@@ -769,7 +776,7 @@ const App: React.FC = () => {
                 onUpdateTodoImages={handleUpdateTodoImages}
                 currentUser={user}
                 onClose={() => setShowMonthSchedulePanel(false)}
-                dateColors={dateColors}
+                dateColors={calendarMonthDateColors}
                 showGoogleExport
                 hideAddForm
                 showTodoDates
@@ -791,7 +798,7 @@ const App: React.FC = () => {
                 onUpdateTodoImages={handleUpdateTodoImages}
                 currentUser={user}
                 onClose={() => setShowMonthSchedulePanel(false)}
-                dateColors={dateColors}
+                dateColors={calendarMonthDateColors}
                 showGoogleExport
                 hideAddForm
                 showTodoDates

@@ -524,13 +524,18 @@ const TodoList: React.FC<TodoListProps> = ({
     }
 
     if (todos.length === 0) {
-      showToast("追加するタスクがありません", "error");
-      return;
+      const hasDayColors = dateColors.some((dc) => Boolean(dc.color));
+      if (!hasDayColors) {
+        showToast("追加するタスクがありません", "error");
+        return;
+      }
     }
 
     setIsExportingToGoogle(true);
     try {
-      const result = await exportTodosToGoogleCalendar(todos, dateColors);
+      const result = await exportTodosToGoogleCalendar(todos, dateColors, {
+        exportAllProvidedDayColors: showGoogleExport,
+      });
       if (result.created > 0 && result.failed === 0) {
         const skipNote =
           result.skipped > 0 ? `（スキップ ${result.skipped}件）` : "";

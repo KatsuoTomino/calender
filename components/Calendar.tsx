@@ -10,6 +10,7 @@ interface CalendarProps {
   onMonthChange: (offset: number) => void;
   onDateChange?: (year: number, month: number) => void;
   onDeleteMonthTodos: () => void;
+  onOpenMonthSchedule?: () => void;
   todos: TodoItem[];
   dateColors?: DateColor[];
 }
@@ -21,6 +22,7 @@ const Calendar: React.FC<CalendarProps> = ({
   onMonthChange,
   onDateChange,
   onDeleteMonthTodos,
+  onOpenMonthSchedule,
   todos,
   dateColors = [],
 }) => {
@@ -326,6 +328,29 @@ const Calendar: React.FC<CalendarProps> = ({
           )}
         </div>
         <div className="flex gap-1 sm:gap-2 items-center">
+          {onOpenMonthSchedule && (
+            <button
+              onClick={onOpenMonthSchedule}
+              className="px-2 sm:px-3 py-1 sm:py-1.5 text-[10px] sm:text-xs font-medium text-teal-700 hover:bg-teal-50 rounded-lg transition-colors flex items-center gap-0.5 sm:gap-1"
+              title="この月の予定一覧"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                className="h-4 w-4"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M4 6h16M4 10h16M4 14h16M4 18h16"
+                />
+              </svg>
+              月の一覧
+            </button>
+          )}
           <button
             onClick={onDeleteMonthTodos}
             className="px-2 sm:px-3 py-1 sm:py-1.5 text-[10px] sm:text-xs font-medium text-red-600 hover:bg-red-50 rounded-lg transition-colors flex items-center gap-0.5 sm:gap-1"

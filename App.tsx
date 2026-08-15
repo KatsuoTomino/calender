@@ -30,7 +30,8 @@ const App: React.FC = () => {
   const [showTodoPanel, setShowTodoPanel] = useState(false); // For mobile toggle
   const [showImportantPanel, setShowImportantPanel] = useState(false); // 重要なことパネル
   const [showShoppingPanel, setShowShoppingPanel] = useState(false); // 買い物リストパネル
-  const [showMonthTasksPanel, setShowMonthTasksPanel] = useState(false); // 月のタスクパネル
+  const [showMonthTasksPanel, setShowMonthTasksPanel] = useState(false); // 月のタスクパネル（お金）
+  const [showMonthSchedulePanel, setShowMonthSchedulePanel] = useState(false); // 表示月の日付タスク一覧
   const [avatarImageUrl, setAvatarImageUrl] = useState<string | null>(null); // アバター画像の表示用URL
   const [dateColors, setDateColors] = useState<DateColor[]>([]);
   const avatarFileInputRef = useRef<HTMLInputElement>(null);
@@ -430,6 +431,13 @@ const App: React.FC = () => {
   const importantTodos = todos.filter((t) => t.dateStr === 'important');
   const shoppingTodos = todos.filter((t) => t.dateStr === 'shopping');
   const monthTodos = todos.filter((t) => t.dateStr === 'monthly');
+  const calendarMonthTodos = todos.filter((todo) => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(todo.dateStr)) return false;
+    const [y, m] = todo.dateStr.split("-").map(Number);
+    return (
+      y === currentDate.getFullYear() && m === currentDate.getMonth() + 1
+    );
+  });
 
   if (!user) {
     return <Login onLogin={handleLogin} />;
@@ -551,6 +559,7 @@ const App: React.FC = () => {
             onMonthChange={handleMonthChange}
             onDateChange={handleDateChange}
             onDeleteMonthTodos={handleDeleteMonthTodos}
+            onOpenMonthSchedule={() => setShowMonthSchedulePanel(true)}
             todos={todos}
             dateColors={dateColors}
           />
@@ -736,6 +745,54 @@ const App: React.FC = () => {
                 onUpdateTodoImages={handleUpdateTodoImages}
                 currentUser={user}
                 onClose={() => setShowMonthTasksPanel(false)}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* 表示月の日付タスク一覧 - Desktop */}
+        {showMonthSchedulePanel && (
+          <div
+            className="hidden md:block fixed inset-0 z-40 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4"
+            onClick={() => setShowMonthSchedulePanel(false)}
+          >
+            <div
+              className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl h-[80vh] flex flex-col overflow-hidden"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <TodoList
+                title={`${currentDate.getFullYear()}年${currentDate.getMonth() + 1}月の予定`}
+                todos={calendarMonthTodos}
+                onAddTodo={handleAddTodo}
+                onToggleTodo={handleToggleTodo}
+                onDeleteTodo={handleDeleteTodo}
+                onUpdateTodoImages={handleUpdateTodoImages}
+                currentUser={user}
+                onClose={() => setShowMonthSchedulePanel(false)}
+                showGoogleExport
+                hideAddForm
+                showTodoDates
+              />
+            </div>
+          </div>
+        )}
+
+        {/* 表示月の日付タスク一覧 - Mobile */}
+        {showMonthSchedulePanel && (
+          <div className="md:hidden fixed inset-0 z-40 bg-black/50 backdrop-blur-sm">
+            <div className="absolute inset-0 bg-white shadow-2xl flex flex-col overflow-hidden">
+              <TodoList
+                title={`${currentDate.getFullYear()}年${currentDate.getMonth() + 1}月の予定`}
+                todos={calendarMonthTodos}
+                onAddTodo={handleAddTodo}
+                onToggleTodo={handleToggleTodo}
+                onDeleteTodo={handleDeleteTodo}
+                onUpdateTodoImages={handleUpdateTodoImages}
+                currentUser={user}
+                onClose={() => setShowMonthSchedulePanel(false)}
+                showGoogleExport
+                hideAddForm
+                showTodoDates
               />
             </div>
           </div>

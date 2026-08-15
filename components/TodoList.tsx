@@ -23,6 +23,12 @@ interface TodoListProps {
   dateColors?: DateColor[];
   onSetDateColor?: (dateStr: string, color: DateColorType) => void;
   onSetDateLabel?: (dateStr: string, label: string | null) => void;
+  /** Force show Google Calendar export (e.g. month list of dated tasks) */
+  showGoogleExport?: boolean;
+  /** Hide the new-task input (read-only style lists) */
+  hideAddForm?: boolean;
+  /** Show each todo's dateStr in the list */
+  showTodoDates?: boolean;
 }
 
 // 確認モーダルの型
@@ -174,6 +180,9 @@ const TodoList: React.FC<TodoListProps> = ({
   dateColors = [],
   onSetDateColor,
   onSetDateLabel,
+  showGoogleExport = false,
+  hideAddForm = false,
+  showTodoDates = false,
 }) => {
   const [newTodoText, setNewTodoText] = useState("");
   const [isUploading, setIsUploading] = useState(false);
@@ -255,8 +264,9 @@ const TodoList: React.FC<TodoListProps> = ({
   };
 
   useEffect(() => {
+    if (hideAddForm) return;
     if (inputRef.current) inputRef.current.focus();
-  }, [date]);
+  }, [date, hideAddForm]);
 
   // ESCキーでモーダルを閉じる
   useEffect(() => {
@@ -502,7 +512,8 @@ const TodoList: React.FC<TodoListProps> = ({
   };
 
   const handleExportToGoogleCalendar = async () => {
-    if (!date || dateStr) return;
+    const canExportDay = Boolean(date) && !dateStr;
+    if (!canExportDay && !showGoogleExport) return;
 
     if (!isGoogleCalendarConfigured()) {
       showToast(
@@ -552,7 +563,19 @@ const TodoList: React.FC<TodoListProps> = ({
     }
   };
 
+  const canShowGoogleExport =
+    showGoogleExport || (Boolean(date) && !dateStr);
+
+  const formatTodoDateLabel = (value: string): string => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
+    const [, m, d] = value.split("-");
+    return `${Number(m)}/${Number(d)}`;
+  };
+
   const sortedTodos = [...todos].sort((a, b) => {
+    if (showTodoDates && a.dateStr !== b.dateStr) {
+      return a.dateStr.localeCompare(b.dateStr);
+    }
     if (a.completed === b.completed) return 0;
     return a.completed ? 1 : -1;
   });
@@ -571,8 +594,8 @@ const TodoList: React.FC<TodoListProps> = ({
             </p>
           </div>
           <div className="flex items-center gap-1 shrink-0">
-            {/* 日付タスクのみ Google カレンダーへエクスポート */}
-            {!dateStr && date && (
+            {/* 日付タスク / 月一覧の Google カレンダーへエクスポート */}
+            {canShowGoogleExport && (
               <button
                 type="button"
                 onClick={handleExportToGoogleCalendar}
@@ -580,8 +603,10 @@ const TodoList: React.FC<TodoListProps> = ({
                 className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] sm:text-xs font-medium text-slate-700 bg-teal-50 border border-teal-200 hover:bg-teal-100 hover:border-teal-300 disabled:opacity-50 disabled:cursor-not-allowed active:scale-95 transition-all touch-manipulation"
                 title={
                   todos.length === 0
-                    ? "この日にタスクがありません。先にタスクを追加してください"
-                    : "この日のタスクをGoogleカレンダーに追加"
+                    ? "この期間にタスクがありません。先にタスクを追加してください"
+                    : showGoogleExport
+                      ? "表示中のタスクをすべてGoogleカレンダーに追加"
+                      : "この日のタスクをGoogleカレンダーに追加"
                 }
                 aria-label="Googleカレンダーに追加"
               >
@@ -600,12 +625,16 @@ const TodoList: React.FC<TodoListProps> = ({
                   />
                 </svg>
                 <span className="whitespace-nowrap">
-                  {isExportingToGoogle ? "追加中…" : "Googleに追加"}
+                  {isExportingToGoogle
+                    ? "追加中…"
+                    : showGoogleExport
+                      ? "月をGoogleに追加"
+                      : "Googleに追加"}
                 </span>
               </button>
             )}
-            {/* モーダル表示の場合（important, shopping, monthly）は常に×ボタンを表示 */}
-            {(dateStr === 'important' || dateStr === 'shopping' || dateStr === 'monthly') && (
+            {/* モーダル表示の場合（important, shopping, monthly）または月一覧は×ボタン */}
+            {(dateStr === 'important' || dateStr === 'shopping' || dateStr === 'monthly' || showGoogleExport) && (
               <button
                 onClick={onClose}
                 className="p-2 text-slate-400 hover:text-slate-600 active:scale-95 transition-transform"
@@ -627,7 +656,7 @@ const TodoList: React.FC<TodoListProps> = ({
               </button>
             )}
             {/* 日付ベースのタスクはモバイルのみ×ボタンを表示 */}
-            {!dateStr && (
+            {!dateStr && !showGoogleExport && (
               <button
                 onClick={onClose}
                 className="md:hidden p-2 text-slate-400 hover:text-slate-600 active:scale-95 transition-transform"
@@ -672,6 +701,7 @@ const TodoList: React.FC<TodoListProps> = ({
       </div>
 
       {/* Input Area */}
+      {!hideAddForm && (
       <div className="p-4 bg-white border-b border-slate-100 shrink-0">
         <form onSubmit={handleAdd} className="relative">
           <input
@@ -692,6 +722,7 @@ const TodoList: React.FC<TodoListProps> = ({
           </button>
         </form>
       </div>
+      )}
 
       {/* List */}
       <div className="flex-1 overflow-y-auto p-4 space-y-3 no-scrollbar">
@@ -747,15 +778,22 @@ const TodoList: React.FC<TodoListProps> = ({
                 )}
               </button>
               <div className="flex-1 flex flex-col gap-2">
-                <span
-                  className={`text-sm ${
-                    todo.completed
-                      ? "line-through text-slate-400"
-                      : "text-slate-700"
-                  }`}
-                >
-                  {linkifyText(todo.text)}
-                </span>
+                <div className="flex items-start gap-2">
+                  {showTodoDates && (
+                    <span className="shrink-0 mt-0.5 px-1.5 py-0.5 rounded bg-slate-100 text-[10px] font-medium text-slate-500 tabular-nums">
+                      {formatTodoDateLabel(todo.dateStr)}
+                    </span>
+                  )}
+                  <span
+                    className={`text-sm ${
+                      todo.completed
+                        ? "line-through text-slate-400"
+                        : "text-slate-700"
+                    }`}
+                  >
+                    {linkifyText(todo.text)}
+                  </span>
+                </div>
                 {/* 画像一覧と追加ボタン */}
                 <div className="mt-1 flex flex-col gap-2">
                   {/* 画像一覧 */}

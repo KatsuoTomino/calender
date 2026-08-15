@@ -771,6 +771,10 @@ const App: React.FC = () => {
                 onClose={() => setShowMonthSchedulePanel(false)}
                 dateColors={dateColors}
                 showGoogleExport
+                googleImportMonth={{
+                  year: currentDate.getFullYear(),
+                  month: currentDate.getMonth() + 1,
+                }}
                 hideAddForm
                 showTodoDates
               />
@@ -793,6 +797,10 @@ const App: React.FC = () => {
                 onClose={() => setShowMonthSchedulePanel(false)}
                 dateColors={dateColors}
                 showGoogleExport
+                googleImportMonth={{
+                  year: currentDate.getFullYear(),
+                  month: currentDate.getMonth() + 1,
+                }}
                 hideAddForm
                 showTodoDates
               />

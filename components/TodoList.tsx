@@ -9,6 +9,8 @@ import {
   getGoogleExportedTodoIds,
   hasGoogleCalendarEvent,
   isGoogleCalendarConfigured,
+  linkTodoToGoogleEvent,
+  listGoogleCalendarEventsToImport,
   setGoogleCalendarExportMark,
 } from "../services/googleCalendarService";
 import Button from "./Button";
@@ -29,6 +31,11 @@ interface TodoListProps {
   onSetDateLabel?: (dateStr: string, label: string | null) => void;
   /** Force show Google Calendar export (e.g. month list of dated tasks) */
   showGoogleExport?: boolean;
+  /**
+   * When set (with showGoogleExport), show Gカレ import for this calendar month.
+   * month is 1–12.
+   */
+  googleImportMonth?: { year: number; month: number };
   /** Hide the new-task input (read-only style lists) */
   hideAddForm?: boolean;
   /** Show each todo's dateStr in the list */
@@ -43,6 +50,7 @@ interface ConfirmModalState {
   onConfirm: () => void;
   confirmLabel: string;
   confirmBusyLabel: string;
+  confirmTone?: "danger" | "primary";
   secondaryLabel?: string;
   onSecondary?: () => void;
 }
@@ -189,6 +197,7 @@ const TodoList: React.FC<TodoListProps> = ({
   onSetDateColor,
   onSetDateLabel,
   showGoogleExport = false,
+  googleImportMonth,
   hideAddForm = false,
   showTodoDates = false,
 }) => {
@@ -220,6 +229,7 @@ const TodoList: React.FC<TodoListProps> = ({
   });
   const [isDeleting, setIsDeleting] = useState(false);
   const [isExportingToGoogle, setIsExportingToGoogle] = useState(false);
+  const [isImportingFromGoogle, setIsImportingFromGoogle] = useState(false);
   /** Bump after export so Google checkmarks re-read localStorage. */
   const [googleExportTick, setGoogleExportTick] = useState(0);
 
@@ -312,6 +322,7 @@ const TodoList: React.FC<TodoListProps> = ({
     options?: {
       confirmLabel?: string;
       confirmBusyLabel?: string;
+      confirmTone?: "danger" | "primary";
       secondaryLabel?: string;
       onSecondary?: () => void;
     }
@@ -323,6 +334,7 @@ const TodoList: React.FC<TodoListProps> = ({
       onConfirm,
       confirmLabel: options?.confirmLabel ?? "削除する",
       confirmBusyLabel: options?.confirmBusyLabel ?? "削除中...",
+      confirmTone: options?.confirmTone ?? "danger",
       secondaryLabel: options?.secondaryLabel,
       onSecondary: options?.onSecondary,
     });
@@ -690,6 +702,83 @@ const TodoList: React.FC<TodoListProps> = ({
     setGoogleExportTick((n) => n + 1);
   };
 
+  const runGoogleImport = async () => {
+    if (!googleImportMonth) return;
+    setIsImportingFromGoogle(true);
+    try {
+      // Append-only: never updates/deletes existing app todos.
+      const result = await listGoogleCalendarEventsToImport(
+        googleImportMonth.year,
+        googleImportMonth.month,
+        todos
+      );
+
+      for (const candidate of result.toImport) {
+        const todo: TodoItem = {
+          id: generateId(),
+          dateStr: candidate.dateStr,
+          text: candidate.text,
+          completed: false,
+          createdBy: currentUser.id,
+        };
+        onAddTodo(todo);
+        linkTodoToGoogleEvent(todo.id, candidate.eventId);
+      }
+
+      setGoogleExportTick((n) => n + 1);
+
+      if (result.toImport.length > 0) {
+        const skipNote =
+          result.skippedMatched > 0
+            ? `（既存一致 ${result.skippedMatched}件はスキップ）`
+            : "";
+        showToast(
+          `Gカレから ${result.toImport.length}件取り込みました${skipNote}`
+        );
+      } else if (result.skippedMatched > 0) {
+        showToast("取り込む新規予定はありません（既存と一致）");
+      } else {
+        showToast("この月のGカレに取り込む予定がありません");
+      }
+    } catch (error) {
+      logger.error("Google Calendar import error:", error);
+      showToast(
+        error instanceof Error
+          ? error.message
+          : "Gカレからの取り込みに失敗しました",
+        "error"
+      );
+    } finally {
+      setIsImportingFromGoogle(false);
+    }
+  };
+
+  const handleImportFromGoogleCalendar = () => {
+    if (!googleImportMonth) return;
+
+    if (!isGoogleCalendarConfigured()) {
+      showToast(
+        "Google連携が未設定です（VITE_GOOGLE_CLIENT_ID）",
+        "error"
+      );
+      return;
+    }
+
+    showConfirmModal(
+      "Gカレから取り込む",
+      `${googleImportMonth.year}年${googleImportMonth.month}月のGoogleカレンダー予定を取り込みます。\n\n・アプリにない予定だけ追加します\n・既存のタスクは変更・削除しません\n・Google側の予定も削除しません`,
+      () => {
+        closeConfirmModal();
+        void runGoogleImport();
+      },
+      {
+        confirmLabel: "取り込む",
+        confirmBusyLabel: "取込中...",
+        confirmTone: "primary",
+      }
+    );
+  };
+
   const formatTodoDateLabel = (value: string): string => {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
     const [, m, d] = value.split("-");
@@ -718,12 +807,45 @@ const TodoList: React.FC<TodoListProps> = ({
             </p>
           </div>
           <div className="flex items-center gap-1 shrink-0">
+            {/* 表示月の Google カレンダーからインポート（追加のみ・削除なし） */}
+            {showGoogleExport && googleImportMonth && (
+              <button
+                type="button"
+                onClick={handleImportFromGoogleCalendar}
+                disabled={isImportingFromGoogle || isExportingToGoogle}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] sm:text-xs font-medium text-slate-700 bg-sky-50 border border-sky-200 hover:bg-sky-100 hover:border-sky-300 disabled:opacity-50 disabled:cursor-not-allowed active:scale-95 transition-all touch-manipulation"
+                title={`${googleImportMonth.year}年${googleImportMonth.month}月のGカレ予定を取り込む（既存タスクは削除しません）`}
+                aria-label="Gカレから取り込む"
+              >
+                <svg
+                  className="w-3.5 h-3.5 text-sky-600 shrink-0"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                  aria-hidden="true"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"
+                  />
+                </svg>
+                <span className="whitespace-nowrap">
+                  {isImportingFromGoogle ? "取込中…" : "Gカレ取込"}
+                </span>
+              </button>
+            )}
             {/* 日付タスク / 月一覧の Google カレンダーへエクスポート */}
             {canShowGoogleExport && (
               <button
                 type="button"
                 onClick={handleExportToGoogleCalendar}
-                disabled={isExportingToGoogle || pendingGoogleTodos.length === 0}
+                disabled={
+                  isExportingToGoogle ||
+                  isImportingFromGoogle ||
+                  pendingGoogleTodos.length === 0
+                }
                 className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] sm:text-xs font-medium text-slate-700 bg-teal-50 border border-teal-200 hover:bg-teal-100 hover:border-teal-300 disabled:opacity-50 disabled:cursor-not-allowed active:scale-95 transition-all touch-manipulation"
                 title={
                   todos.length === 0
@@ -1240,10 +1362,14 @@ const TodoList: React.FC<TodoListProps> = ({
               )}
               <button
                 onClick={confirmModal.onConfirm}
-                disabled={isDeleting}
-                className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors disabled:opacity-50"
+                disabled={isDeleting || isImportingFromGoogle}
+                className={`px-4 py-2 text-white rounded-lg transition-colors disabled:opacity-50 ${
+                  confirmModal.confirmTone === "primary"
+                    ? "bg-sky-500 hover:bg-sky-600"
+                    : "bg-red-500 hover:bg-red-600"
+                }`}
               >
-                {isDeleting
+                {isDeleting || isImportingFromGoogle
                   ? confirmModal.confirmBusyLabel
                   : confirmModal.confirmLabel}
               </button>

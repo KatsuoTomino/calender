@@ -1,8 +1,12 @@
 /**
- * Google Calendar export via Google Identity Services (token model).
+ * Google Calendar export/import via Google Identity Services (token model).
  * Docs:
  * - https://developers.google.com/identity/oauth2/web/guides/use-token-model
  * - https://developers.google.com/calendar/api/v3/reference/events/insert
+ * - https://developers.google.com/calendar/api/v3/reference/events/list
+ *
+ * Import is append-only: it never updates or deletes app todos, and never
+ * deletes Google Calendar events.
  */
 
 import { TodoItem } from "../types";
@@ -12,6 +16,7 @@ const GIS_SCRIPT_SRC = "https://accounts.google.com/gsi/client";
 const CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar.events";
 const EXPORT_STORAGE_KEY = "kizuna_google_calendar_exports";
 const CONNECTED_FLAG_KEY = "kizuna_google_calendar_connected";
+const LOCAL_MARK_EVENT_ID = "local-mark";
 
 type TokenClient = {
   requestAccessToken: (overrideConfig?: { prompt?: string }) => void;
@@ -330,6 +335,200 @@ export async function exportTodosToGoogleCalendar(
   return result;
 }
 
+export type GoogleImportCandidate = {
+  eventId: string;
+  dateStr: string;
+  text: string;
+};
+
+export type GoogleImportListResult = {
+  /** Events that are on Google but not matched to existing app todos. */
+  toImport: GoogleImportCandidate[];
+  /** Already linked by event id or same date+title in the app. */
+  skippedMatched: number;
+  /** Cancelled / empty / out-of-range / ignored placeholders. */
+  skippedOther: number;
+};
+
+type GoogleCalendarListEvent = {
+  id?: string;
+  status?: string;
+  summary?: string;
+  start?: { date?: string; dateTime?: string };
+  end?: { date?: string; dateTime?: string };
+};
+
+function pad2(n: number): string {
+  return String(n).padStart(2, "0");
+}
+
+function monthTimeBounds(
+  year: number,
+  month: number
+): { timeMin: string; timeMax: string; monthStart: string; monthEndExclusive: string } {
+  // Local calendar month [first day, next month first day)
+  const start = new Date(year, month - 1, 1, 0, 0, 0, 0);
+  const end = new Date(year, month, 1, 0, 0, 0, 0);
+  const monthStart = `${year}-${pad2(month)}-01`;
+  const ey = end.getFullYear();
+  const em = end.getMonth() + 1;
+  const monthEndExclusive = `${ey}-${pad2(em)}-01`;
+  return {
+    timeMin: start.toISOString(),
+    timeMax: end.toISOString(),
+    monthStart,
+    monthEndExclusive,
+  };
+}
+
+function eventStartDateStr(event: GoogleCalendarListEvent): string | null {
+  if (event.start?.date && /^\d{4}-\d{2}-\d{2}$/.test(event.start.date)) {
+    return event.start.date;
+  }
+  if (event.start?.dateTime) {
+    const d = new Date(event.start.dateTime);
+    if (Number.isNaN(d.getTime())) return null;
+    return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+  }
+  return null;
+}
+
+function eventDisplayText(event: GoogleCalendarListEvent): string {
+  const summary = (event.summary || "").trim() || "(無題)";
+  if (event.start?.dateTime) {
+    const d = new Date(event.start.dateTime);
+    if (!Number.isNaN(d.getTime())) {
+      const hh = pad2(d.getHours());
+      const mm = pad2(d.getMinutes());
+      return `${hh}:${mm} ${summary}`;
+    }
+  }
+  return summary;
+}
+
+function normalizeTodoText(text: string): string {
+  return text.trim().replace(/\s+/g, " ");
+}
+
+/**
+ * List primary-calendar events in the given month that are not already
+ * represented in existingTodos.
+ *
+ * Safety: read-only against Google (events.list only). Does not delete or
+ * update any app todos. Caller must only addTodo for `toImport`.
+ */
+export async function listGoogleCalendarEventsToImport(
+  year: number,
+  month: number,
+  existingTodos: TodoItem[]
+): Promise<GoogleImportListResult> {
+  // Docs: https://developers.google.com/calendar/api/v3/reference/events/list
+  const accessToken = await requestAccessToken();
+  const { timeMin, timeMax, monthStart, monthEndExclusive } = monthTimeBounds(
+    year,
+    month
+  );
+  const exportMap = loadExportMap();
+  const linkedEventIds = new Set(
+    Object.values(exportMap).filter(
+      (id) => id && id !== LOCAL_MARK_EVENT_ID && !id.startsWith("bg:")
+    )
+  );
+
+  const existingKeys = new Set(
+    existingTodos
+      .filter((t) => isDateTask(t))
+      .map((t) => `${t.dateStr}|${normalizeTodoText(t.text)}`)
+  );
+
+  const toImport: GoogleImportCandidate[] = [];
+  const seenEventIds = new Set<string>();
+  let skippedMatched = 0;
+  let skippedOther = 0;
+  let pageToken: string | undefined;
+
+  do {
+    const params = new URLSearchParams({
+      timeMin,
+      timeMax,
+      singleEvents: "true",
+      orderBy: "startTime",
+      maxResults: "250",
+    });
+    if (pageToken) params.set("pageToken", pageToken);
+
+    const res = await fetch(
+      `https://www.googleapis.com/calendar/v3/calendars/primary/events?${params}`,
+      {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      }
+    );
+
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(`Calendar API ${res.status}: ${text.slice(0, 200)}`);
+    }
+
+    const data = (await res.json()) as {
+      items?: GoogleCalendarListEvent[];
+      nextPageToken?: string;
+    };
+
+    for (const event of data.items || []) {
+      if (!event.id || seenEventIds.has(event.id)) {
+        skippedOther += 1;
+        continue;
+      }
+      seenEventIds.add(event.id);
+
+      if (event.status === "cancelled") {
+        skippedOther += 1;
+        continue;
+      }
+
+      const dateStr = eventStartDateStr(event);
+      if (!dateStr || dateStr < monthStart || dateStr >= monthEndExclusive) {
+        skippedOther += 1;
+        continue;
+      }
+
+      const text = eventDisplayText(event);
+      if (text.startsWith("■ 背景色")) {
+        skippedOther += 1;
+        continue;
+      }
+
+      if (linkedEventIds.has(event.id)) {
+        skippedMatched += 1;
+        continue;
+      }
+
+      const key = `${dateStr}|${normalizeTodoText(text)}`;
+      if (existingKeys.has(key)) {
+        skippedMatched += 1;
+        continue;
+      }
+
+      // Avoid duplicate candidates within the same import batch
+      existingKeys.add(key);
+      linkedEventIds.add(event.id);
+      toImport.push({ eventId: event.id, dateStr, text });
+    }
+
+    pageToken = data.nextPageToken;
+  } while (pageToken);
+
+  return { toImport, skippedMatched, skippedOther };
+}
+
+/** Record that a todo is linked to a Google event (no API write). */
+export function linkTodoToGoogleEvent(todoId: string, eventId: string): void {
+  if (!todoId || !eventId || eventId === LOCAL_MARK_EVENT_ID) return;
+  const map = loadExportMap();
+  map[todoId] = eventId;
+  saveExportMap(map);
+}
+
 /** Whether this todo was exported to Google Calendar from this browser. */
 export function isTodoExportedToGoogle(todoId: string): boolean {
   const map = loadExportMap();
@@ -343,8 +542,6 @@ export function getGoogleExportedTodoIds(): Set<string> {
     Object.keys(map).filter((key) => !key.startsWith("bg:"))
   );
 }
-
-const LOCAL_MARK_EVENT_ID = "local-mark";
 
 /** Real Google event id if this todo was exported (not a manual local-only mark). */
 export function getGoogleCalendarEventId(todoId: string): string | null {

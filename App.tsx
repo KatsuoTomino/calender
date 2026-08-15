@@ -20,6 +20,7 @@ import { fetchDateColors, setDateColor, setDateLabel, subscribeDateColorChanges 
 import { logger } from "./services/logger";
 import {
   consumeGoogleOAuthRedirect,
+  migrateLocalGoogleMarksToDatabase,
   resumePendingGoogleExport,
 } from "./services/googleCalendarService";
 import Login from "./components/Login";
@@ -152,6 +153,7 @@ const App: React.FC = () => {
     void (async () => {
       try {
         const result = await resumePendingGoogleExport();
+        await loadTodos();
         if (result) {
           if (result.created > 0) {
             setGoogleFlash(`Gカレに ${result.created}件追加しました`);
@@ -259,8 +261,10 @@ const App: React.FC = () => {
   };
 
   const loadTodos = async () => {
-    const todos = await fetchTodos();
-    setTodos(todos);
+    const data = await fetchTodos();
+    await migrateLocalGoogleMarksToDatabase(data);
+    const refreshed = await fetchTodos();
+    setTodos(refreshed);
   };
 
   const loadDateColors = async () => {
@@ -395,6 +399,26 @@ const App: React.FC = () => {
       setTodos((prev) => [...prev, deletedTodo]);
       alert("Todoの削除に失敗しました");
     }
+  };
+
+  const handleGoogleMarkChange = (
+    id: string,
+    mark: { googleEventId?: string | null; googleChecked: boolean }
+  ) => {
+    setTodos((prev) =>
+      prev.map((t) =>
+        t.id === id
+          ? {
+              ...t,
+              googleChecked: mark.googleChecked,
+              googleEventId:
+                mark.googleEventId === undefined
+                  ? t.googleEventId
+                  : mark.googleEventId,
+            }
+          : t
+      )
+    );
   };
 
   const handleUpdateTodoImages = async (id: string, imageUrls: string[] | null) => {
@@ -632,6 +656,7 @@ const App: React.FC = () => {
               onToggleTodo={handleToggleTodo}
               onDeleteTodo={handleDeleteTodo}
               onUpdateTodoImages={handleUpdateTodoImages}
+              onGoogleMarkChange={handleGoogleMarkChange}
               currentUser={user}
               onClose={() => setShowTodoPanel(false)}
               dateColors={dateColors}
@@ -667,6 +692,7 @@ const App: React.FC = () => {
               onToggleTodo={handleToggleTodo}
               onDeleteTodo={handleDeleteTodo}
               onUpdateTodoImages={handleUpdateTodoImages}
+              onGoogleMarkChange={handleGoogleMarkChange}
               currentUser={user}
               onClose={() => setShowTodoPanel(false)}
               dateColors={dateColors}
@@ -694,6 +720,7 @@ const App: React.FC = () => {
                 onToggleTodo={handleToggleTodo}
                 onDeleteTodo={handleDeleteTodo}
                 onUpdateTodoImages={handleUpdateTodoImages}
+              onGoogleMarkChange={handleGoogleMarkChange}
                 currentUser={user}
                 onClose={() => setShowImportantPanel(false)}
               />
@@ -713,6 +740,7 @@ const App: React.FC = () => {
                 onToggleTodo={handleToggleTodo}
                 onDeleteTodo={handleDeleteTodo}
                 onUpdateTodoImages={handleUpdateTodoImages}
+              onGoogleMarkChange={handleGoogleMarkChange}
                 currentUser={user}
                 onClose={() => setShowImportantPanel(false)}
               />
@@ -738,6 +766,7 @@ const App: React.FC = () => {
                 onToggleTodo={handleToggleTodo}
                 onDeleteTodo={handleDeleteTodo}
                 onUpdateTodoImages={handleUpdateTodoImages}
+              onGoogleMarkChange={handleGoogleMarkChange}
                 currentUser={user}
                 onClose={() => setShowShoppingPanel(false)}
               />
@@ -757,6 +786,7 @@ const App: React.FC = () => {
                 onToggleTodo={handleToggleTodo}
                 onDeleteTodo={handleDeleteTodo}
                 onUpdateTodoImages={handleUpdateTodoImages}
+              onGoogleMarkChange={handleGoogleMarkChange}
                 currentUser={user}
                 onClose={() => setShowShoppingPanel(false)}
               />
@@ -782,6 +812,7 @@ const App: React.FC = () => {
                 onToggleTodo={handleToggleTodo}
                 onDeleteTodo={handleDeleteTodo}
                 onUpdateTodoImages={handleUpdateTodoImages}
+              onGoogleMarkChange={handleGoogleMarkChange}
                 currentUser={user}
                 onClose={() => setShowMonthTasksPanel(false)}
               />
@@ -801,6 +832,7 @@ const App: React.FC = () => {
                 onToggleTodo={handleToggleTodo}
                 onDeleteTodo={handleDeleteTodo}
                 onUpdateTodoImages={handleUpdateTodoImages}
+              onGoogleMarkChange={handleGoogleMarkChange}
                 currentUser={user}
                 onClose={() => setShowMonthTasksPanel(false)}
               />
@@ -825,6 +857,7 @@ const App: React.FC = () => {
                 onToggleTodo={handleToggleTodo}
                 onDeleteTodo={handleDeleteTodo}
                 onUpdateTodoImages={handleUpdateTodoImages}
+              onGoogleMarkChange={handleGoogleMarkChange}
                 currentUser={user}
                 onClose={() => setShowMonthSchedulePanel(false)}
                 dateColors={dateColors}
@@ -851,6 +884,7 @@ const App: React.FC = () => {
                 onToggleTodo={handleToggleTodo}
                 onDeleteTodo={handleDeleteTodo}
                 onUpdateTodoImages={handleUpdateTodoImages}
+              onGoogleMarkChange={handleGoogleMarkChange}
                 currentUser={user}
                 onClose={() => setShowMonthSchedulePanel(false)}
                 dateColors={dateColors}

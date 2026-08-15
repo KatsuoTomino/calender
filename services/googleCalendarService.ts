@@ -11,6 +11,7 @@
 
 import { TodoItem } from "../types";
 import { logger } from "./logger";
+import { updateTodoGoogleMark } from "./todoService";
 
 const GIS_SCRIPT_SRC = "https://accounts.google.com/gsi/client";
 const CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar.events";
@@ -499,8 +500,7 @@ export async function exportTodosToGoogleCalendar(
   );
 
   for (const todo of targets) {
-    // Unchecked (skip:*) entries are eligible for export again.
-    if (!force && isCheckedExportValue(exportMap[todo.id])) {
+    if (!force && todo.googleChecked) {
       result.skipped += 1;
       continue;
     }
@@ -509,6 +509,12 @@ export async function exportTodosToGoogleCalendar(
       const eventId = await insertAllDayEvent(accessToken, todo);
       exportMap[todo.id] = eventId;
       saveExportMap(exportMap);
+      await updateTodoGoogleMark(todo.id, {
+        googleEventId: eventId,
+        googleChecked: true,
+      });
+      todo.googleEventId = eventId;
+      todo.googleChecked = true;
       result.created += 1;
     } catch (error) {
       result.failed += 1;
@@ -618,11 +624,14 @@ export async function listGoogleCalendarEventsToImport(
     month
   );
   const exportMap = loadExportMap();
-  const linkedEventIds = new Set(
-    Object.values(exportMap)
-      .map((id) => resolveStoredEventId(id))
-      .filter((id): id is string => Boolean(id))
-  );
+  const linkedEventIds = new Set<string>();
+  for (const id of Object.values(exportMap)) {
+    const resolved = resolveStoredEventId(id);
+    if (resolved) linkedEventIds.add(resolved);
+  }
+  for (const todo of existingTodos) {
+    if (todo.googleEventId) linkedEventIds.add(todo.googleEventId);
+  }
 
   const existingKeys = new Set(
     existingTodos
@@ -710,36 +719,32 @@ export async function listGoogleCalendarEventsToImport(
   return { toImport, skippedMatched, skippedOther };
 }
 
-/** Record that a todo is linked to a Google event (no API write). */
-export function linkTodoToGoogleEvent(todoId: string, eventId: string): void {
+/** Record that a todo is linked to a Google event (DB + local cache). */
+export async function linkTodoToGoogleEvent(
+  todoId: string,
+  eventId: string
+): Promise<void> {
   if (!todoId || !eventId || eventId === LOCAL_MARK_EVENT_ID) return;
   const map = loadExportMap();
   map[todoId] = eventId;
   saveExportMap(map);
+  await updateTodoGoogleMark(todoId, {
+    googleEventId: eventId,
+    googleChecked: true,
+  });
 }
 
-/** Whether the Gカレ checkbox is on for this todo. */
-export function isTodoExportedToGoogle(todoId: string): boolean {
-  return isCheckedExportValue(loadExportMap()[todoId]);
+export function isTodoGoogleChecked(todo: TodoItem): boolean {
+  return Boolean(todo.googleChecked);
 }
 
-/** Todo IDs with Gカレ checkbox on (excludes unchecked skip:* and bg: keys). */
-export function getGoogleExportedTodoIds(): Set<string> {
-  const map = loadExportMap();
-  return new Set(
-    Object.entries(map)
-      .filter(([key, value]) => !key.startsWith("bg:") && isCheckedExportValue(value))
-      .map(([key]) => key)
-  );
+export function todoGoogleEventId(todo: TodoItem | undefined): string | null {
+  if (!todo?.googleEventId) return null;
+  return resolveStoredEventId(todo.googleEventId);
 }
 
-/** Real Google event id (kept even when Gカレ is unchecked). */
-export function getGoogleCalendarEventId(todoId: string): string | null {
-  return resolveStoredEventId(loadExportMap()[todoId]);
-}
-
-export function hasGoogleCalendarEvent(todoId: string): boolean {
-  return Boolean(getGoogleCalendarEventId(todoId));
+export function hasGoogleCalendarEvent(todo: TodoItem | undefined): boolean {
+  return Boolean(todoGoogleEventId(todo));
 }
 
 /**
@@ -747,19 +752,21 @@ export function hasGoogleCalendarEvent(todoId: string): boolean {
  * local export mark. Manual local-mark entries are cleared without an API call.
  */
 export async function deleteTodoFromGoogleCalendar(
-  todoId: string
+  todoId: string,
+  eventIdFromTodo?: string | null
 ): Promise<{ deleted: boolean; skipped: boolean }> {
   const exportMap = loadExportMap();
-  const raw = exportMap[todoId];
-  const eventId = resolveStoredEventId(raw);
-
-  if (!raw) {
-    return { deleted: false, skipped: true };
-  }
+  const eventId =
+    resolveStoredEventId(eventIdFromTodo || undefined) ||
+    resolveStoredEventId(exportMap[todoId]);
 
   if (!eventId) {
     delete exportMap[todoId];
     saveExportMap(exportMap);
+    await updateTodoGoogleMark(todoId, {
+      googleEventId: null,
+      googleChecked: false,
+    });
     return { deleted: false, skipped: true };
   }
 
@@ -770,55 +777,98 @@ export async function deleteTodoFromGoogleCalendar(
   }
   delete exportMap[todoId];
   saveExportMap(exportMap);
+  await updateTodoGoogleMark(todoId, {
+    googleEventId: null,
+    googleChecked: false,
+  });
   return { deleted: true, skipped: false };
 }
 
 /**
- * Set or clear the Gカレ checkbox.
- * Unchecking keeps the real Google event id (as skip:*) so a later delete
- * can still remove it from Google when checked again / for re-export.
- * Does not create or delete events on Google Calendar by itself.
+ * Set or clear the Gカレ checkbox in the database.
+ * Unchecking keeps the real Google event id so a later delete can still
+ * remove it from Google. Does not create or delete Google events by itself.
  */
-export function setGoogleCalendarExportMark(
-  todoId: string,
+export async function setGoogleCalendarExportMark(
+  todo: TodoItem,
   marked: boolean
-): void {
+): Promise<void> {
+  const eventId = todoGoogleEventId(todo);
   const map = loadExportMap();
-  const current = map[todoId];
 
   if (marked) {
-    if (!current) {
-      map[todoId] = LOCAL_MARK_EVENT_ID;
-    } else if (current.startsWith(SKIP_PREFIX)) {
-      map[todoId] = current.slice(SKIP_PREFIX.length);
-    }
-  } else {
-    if (!current) return;
-    if (current === LOCAL_MARK_EVENT_ID) {
-      delete map[todoId];
-    } else if (!current.startsWith(SKIP_PREFIX)) {
-      const realId = resolveStoredEventId(current);
-      if (realId) {
-        map[todoId] = SKIP_PREFIX + realId;
-      } else {
-        delete map[todoId];
-      }
-    }
+    map[todo.id] = eventId || LOCAL_MARK_EVENT_ID;
+    saveExportMap(map);
+    await updateTodoGoogleMark(todo.id, {
+      googleEventId: eventId,
+      googleChecked: true,
+    });
+    return;
   }
+
+  if (eventId) {
+    map[todo.id] = SKIP_PREFIX + eventId;
+    saveExportMap(map);
+    await updateTodoGoogleMark(todo.id, {
+      googleEventId: eventId,
+      googleChecked: false,
+    });
+    return;
+  }
+
+  delete map[todo.id];
   saveExportMap(map);
+  await updateTodoGoogleMark(todo.id, {
+    googleEventId: null,
+    googleChecked: false,
+  });
 }
 
-/** Remove all local Google link/mark for a todo (does not call Google API). */
-export function clearGoogleCalendarLink(todoId: string): void {
+/** Remove Google link/mark for a todo (does not call Google API). */
+export async function clearGoogleCalendarLink(todoId: string): Promise<void> {
   const map = loadExportMap();
-  if (!map[todoId]) return;
   delete map[todoId];
   saveExportMap(map);
+  await updateTodoGoogleMark(todoId, {
+    googleEventId: null,
+    googleChecked: false,
+  });
 }
 
-/** Clear the local mark for one todo (same as setGoogleCalendarExportMark(id, false)). */
-export function clearGoogleCalendarExportMark(todoId: string): void {
-  setGoogleCalendarExportMark(todoId, false);
+const LOCAL_MARKS_MIGRATED_KEY = "kizuna_google_marks_migrated_v1";
+
+/** One-time copy of this browser's Gカレ marks into Supabase. */
+export async function migrateLocalGoogleMarksToDatabase(
+  todos: TodoItem[]
+): Promise<number> {
+  if (localStorage.getItem(LOCAL_MARKS_MIGRATED_KEY) === "1") {
+    return 0;
+  }
+  const map = loadExportMap();
+  const byId = new Map(todos.map((t) => [t.id, t]));
+  let migrated = 0;
+
+  for (const [todoId, raw] of Object.entries(map)) {
+    if (todoId.startsWith("bg:")) continue;
+    const todo = byId.get(todoId);
+    if (!todo) continue;
+    if (todo.googleChecked || todo.googleEventId) continue;
+
+    const checked = isCheckedExportValue(raw);
+    const eventId = resolveStoredEventId(raw);
+    const ok = await updateTodoGoogleMark(todoId, {
+      googleEventId: eventId,
+      googleChecked: checked,
+    });
+    if (ok) {
+      todo.googleEventId = eventId;
+      todo.googleChecked = checked;
+      migrated += 1;
+    }
+  }
+
+  localStorage.setItem(LOCAL_MARKS_MIGRATED_KEY, "1");
+  return migrated;
 }
 
 /** Clear local export cache so the next export is not skipped. */

@@ -42,6 +42,8 @@ export async function fetchTodos(): Promise<TodoItem[]> {
         completed: todo.completed,
         createdBy: todo.created_by,
         imageUrls,
+        googleEventId: todo.google_event_id || null,
+        googleChecked: Boolean(todo.google_checked),
       };
     });
   } catch (err) {
@@ -59,6 +61,8 @@ export async function addTodo(todo: TodoItem): Promise<boolean> {
       text: todo.text,
       completed: todo.completed,
       created_by: todo.createdBy,
+      google_event_id: todo.googleEventId || null,
+      google_checked: Boolean(todo.googleChecked),
     };
 
     // imageUrlsがある場合は追加（JSON配列として保存）
@@ -131,6 +135,32 @@ export async function updateTodoImages(
 
     if (error) {
       logger.error("Todo画像の更新エラー:", error);
+      return false;
+    }
+
+    return true;
+  } catch (err) {
+    logger.error("予期しないエラー:", err);
+    return false;
+  }
+}
+
+export async function updateTodoGoogleMark(
+  id: string,
+  mark: { googleEventId?: string | null; googleChecked: boolean }
+): Promise<boolean> {
+  try {
+    const { error } = await supabase
+      .from("todos")
+      .update({
+        google_event_id: mark.googleEventId ?? null,
+        google_checked: mark.googleChecked,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", id);
+
+    if (error) {
+      logger.error("TodoのGカレ状態の更新エラー:", error);
       return false;
     }
 

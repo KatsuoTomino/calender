@@ -7,11 +7,9 @@ import {
   clearGoogleCalendarLink,
   deleteTodoFromGoogleCalendar,
   exportTodosToGoogleCalendar,
-  getGoogleExportedTodoIds,
   GoogleImportCandidate,
   hasGoogleCalendarEvent,
   isGoogleCalendarConfigured,
-  isTodoExportedToGoogle,
   linkTodoToGoogleEvent,
   listGoogleCalendarEventsToImport,
   setGoogleCalendarExportMark,
@@ -27,6 +25,10 @@ interface TodoListProps {
   onToggleTodo: (id: string) => void;
   onDeleteTodo: (id: string) => void;
   onUpdateTodoImages: (id: string, imageUrls: string[] | null) => void;
+  onGoogleMarkChange?: (
+    id: string,
+    mark: { googleEventId?: string | null; googleChecked: boolean }
+  ) => void;
   currentUser: User;
   onClose: () => void;
   dateColors?: DateColor[];
@@ -194,6 +196,7 @@ const TodoList: React.FC<TodoListProps> = ({
   onToggleTodo,
   onDeleteTodo,
   onUpdateTodoImages,
+  onGoogleMarkChange,
   currentUser,
   onClose,
   dateColors = [],
@@ -237,8 +240,6 @@ const TodoList: React.FC<TodoListProps> = ({
     candidates: GoogleImportCandidate[];
     skippedMatched: number;
   } | null>(null);
-  /** Bump after export so Google checkmarks re-read localStorage. */
-  const [googleExportTick, setGoogleExportTick] = useState(0);
 
   const inputRef = useRef<HTMLInputElement>(null);
   const todoFileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
@@ -541,16 +542,22 @@ const TodoList: React.FC<TodoListProps> = ({
     options: { alsoDeleteFromGoogle: boolean }
   ) => {
     const todo = todos.find((t) => t.id === todoId);
-    const hadGoogleEvent = hasGoogleCalendarEvent(todoId);
+    const hadGoogleEvent = hasGoogleCalendarEvent(todo);
     closeConfirmModal();
     setIsDeleting(true);
 
     try {
       if (options.alsoDeleteFromGoogle && hadGoogleEvent) {
         try {
-          const result = await deleteTodoFromGoogleCalendar(todoId);
+          const result = await deleteTodoFromGoogleCalendar(
+            todoId,
+            todo?.googleEventId
+          );
           if (result.deleted) {
-            setGoogleExportTick((n) => n + 1);
+            onGoogleMarkChange?.(todoId, {
+              googleEventId: null,
+              googleChecked: false,
+            });
           }
         } catch (error) {
           logger.error("Google Calendar delete error:", error);
@@ -563,9 +570,11 @@ const TodoList: React.FC<TodoListProps> = ({
           return;
         }
       } else {
-        // Drop local link entirely (keep Google event if any)
-        clearGoogleCalendarLink(todoId);
-        setGoogleExportTick((n) => n + 1);
+        await clearGoogleCalendarLink(todoId);
+        onGoogleMarkChange?.(todoId, {
+          googleEventId: null,
+          googleChecked: false,
+        });
       }
 
       if (todo?.imageUrls && todo.imageUrls.length > 0) {
@@ -592,8 +601,8 @@ const TodoList: React.FC<TodoListProps> = ({
   const handleDeleteTodo = (todoId: string) => {
     const todo = todos.find((t) => t.id === todoId);
     // GカレチェックON + 実イベントあり → 必ず両方削除
-    const gCalChecked = isTodoExportedToGoogle(todoId);
-    const canDeleteFromGoogle = hasGoogleCalendarEvent(todoId);
+    const gCalChecked = Boolean(todo?.googleChecked);
+    const canDeleteFromGoogle = hasGoogleCalendarEvent(todo);
 
     if (gCalChecked && canDeleteFromGoogle) {
       showConfirmModal(
@@ -622,11 +631,8 @@ const TodoList: React.FC<TodoListProps> = ({
   const canShowGoogleExport =
     showGoogleExport || (Boolean(date) && !dateStr);
 
-  // Re-read export map when tick / todos change (localStorage is source of truth).
-  void googleExportTick;
-  const googleExportedIds = getGoogleExportedTodoIds();
   const pendingGoogleTodos = todos.filter(
-    (t) => /^\d{4}-\d{2}-\d{2}$/.test(t.dateStr) && !googleExportedIds.has(t.id)
+    (t) => /^\d{4}-\d{2}-\d{2}$/.test(t.dateStr) && !t.googleChecked
   );
 
   const runGoogleExport = async () => {
@@ -636,7 +642,14 @@ const TodoList: React.FC<TodoListProps> = ({
       const result = await exportTodosToGoogleCalendar(pendingGoogleTodos, {
         force: false,
       });
-      setGoogleExportTick((n) => n + 1);
+      for (const todo of pendingGoogleTodos) {
+        if (todo.googleChecked) {
+          onGoogleMarkChange?.(todo.id, {
+            googleEventId: todo.googleEventId ?? null,
+            googleChecked: true,
+          });
+        }
+      }
 
       if (result.cleanedBackgrounds && result.cleanedBackgrounds > 0) {
         showToast(
@@ -704,25 +717,29 @@ const TodoList: React.FC<TodoListProps> = ({
     await runGoogleExport();
   };
 
-  const handleToggleGoogleExportMark = (todoId: string) => {
-    const next = !googleExportedIds.has(todoId);
-    setGoogleCalendarExportMark(todoId, next);
-    setGoogleExportTick((n) => n + 1);
+  const handleToggleGoogleExportMark = async (todo: TodoItem) => {
+    const next = !todo.googleChecked;
+    await setGoogleCalendarExportMark(todo, next);
+    onGoogleMarkChange?.(todo.id, {
+      googleChecked: next,
+      googleEventId: todo.googleEventId ?? null,
+    });
   };
 
   const applyGoogleImport = async (candidates: GoogleImportCandidate[]) => {
     for (const candidate of candidates) {
-      const todo: TodoItem = {
-        id: generateId(),
-        dateStr: candidate.dateStr,
-        text: candidate.text,
-        completed: false,
-        createdBy: currentUser.id,
-      };
-      onAddTodo(todo);
-      linkTodoToGoogleEvent(todo.id, candidate.eventId);
+        const todo: TodoItem = {
+          id: generateId(),
+          dateStr: candidate.dateStr,
+          text: candidate.text,
+          completed: false,
+          createdBy: currentUser.id,
+          googleEventId: candidate.eventId,
+          googleChecked: true,
+        };
+        onAddTodo(todo);
+        await linkTodoToGoogleEvent(todo.id, candidate.eventId);
     }
-    setGoogleExportTick((n) => n + 1);
   };
 
   const handleImportFromGoogleCalendar = async () => {
@@ -1063,31 +1080,31 @@ const TodoList: React.FC<TodoListProps> = ({
                   {canShowGoogleExport && (
                     <button
                       type="button"
-                      onClick={() => handleToggleGoogleExportMark(todo.id)}
+                      onClick={() => handleToggleGoogleExportMark(todo)}
                       className="shrink-0 mt-0.5 inline-flex flex-col items-center gap-0.5 min-w-[2.25rem] cursor-pointer"
                       title={
-                        googleExportedIds.has(todo.id)
+                        todo.googleChecked
                           ? "Gカレのチェックを外す（次回の追加対象になります）"
                           : "Gカレにチェックを付ける（次回の追加から除外）"
                       }
                       aria-label={
-                        googleExportedIds.has(todo.id)
+                        todo.googleChecked
                           ? "Gカレ追加済み。クリックでチェックを外す"
                           : "Gカレ未追加。クリックでチェックを付ける"
                       }
-                      aria-pressed={googleExportedIds.has(todo.id)}
+                      aria-pressed={Boolean(todo.googleChecked)}
                     >
                       <span className="text-[9px] font-medium leading-none text-teal-700">
                         Gカレ
                       </span>
                       <span
                         className={`inline-flex items-center justify-center w-5 h-5 rounded border-2 transition-colors ${
-                          googleExportedIds.has(todo.id)
+                          todo.googleChecked
                             ? "bg-teal-500 border-teal-500 text-white hover:bg-teal-600"
                             : "border-slate-300 bg-white hover:border-teal-400"
                         }`}
                       >
-                        {googleExportedIds.has(todo.id) && (
+                        {todo.googleChecked && (
                           <svg
                             className="w-3 h-3"
                             fill="none"

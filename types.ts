@@ -15,6 +15,10 @@ export interface TodoItem {
   completed: boolean;
   createdBy: string; // User ID
   imageUrls?: string[]; // R2に保存された画像のキー配列（オプション）
+  /** Google Calendar event id (kept even when Gカレ is unchecked) */
+  googleEventId?: string | null;
+  /** Gカレ checkbox — true means already exported / skip next export */
+  googleChecked?: boolean;
 }
 
 export interface DayData {

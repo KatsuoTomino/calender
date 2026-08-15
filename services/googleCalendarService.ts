@@ -18,6 +18,9 @@ const CONNECTED_FLAG_KEY = "kizuna_google_calendar_connected";
  * Map Tomy's date cell colors to Google Calendar event colorId.
  * Common event IDs: 1 Lavender, 2 Sage, 3 Grape, 4 Flamingo, 5 Banana,
  * 6 Tangerine, 7 Peacock, 8 Graphite, 9 Blueberry, 10 Basil, 11 Tomato
+ *
+ * Note: Google Calendar has no API to paint a day-cell background like Tomy's
+ * calendar. Only event colorId is supported.
  */
 const DATE_COLOR_TO_GOOGLE_EVENT_ID: Record<
   Exclude<DateColorType, null>,
@@ -28,14 +31,6 @@ const DATE_COLOR_TO_GOOGLE_EVENT_ID: Record<
   blue: "9", // Blueberry
   green: "10", // Basil
   purple: "3", // Grape
-};
-
-const DATE_COLOR_LABEL_JA: Record<Exclude<DateColorType, null>, string> = {
-  red: "赤",
-  yellow: "黄",
-  blue: "青",
-  green: "緑",
-  purple: "紫",
 };
 
 type TokenClient = {
@@ -74,15 +69,10 @@ export type GoogleExportResult = {
   skipped: number;
   failed: number;
   errors: string[];
+  cleanedBackgrounds?: number;
 };
 
 export type GoogleExportOptions = {
-  /**
-   * When true, export a day-background event for every colored day in
-   * `dateColors` (used by month list). When false, only days that appear
-   * in the exported todos get a background event.
-   */
-  exportAllProvidedDayColors?: boolean;
   /**
    * When true, ignore the local "already exported" cache and create events
    * again (may duplicate on Google Calendar).
@@ -98,12 +88,8 @@ export function isGoogleCalendarConfigured(): boolean {
   return Boolean(getClientId());
 }
 
-function isDateStr(value: string): boolean {
-  return /^\d{4}-\d{2}-\d{2}$/.test(value);
-}
-
 function isDateTask(todo: TodoItem): boolean {
-  return isDateStr(todo.dateStr);
+  return /^\d{4}-\d{2}-\d{2}$/.test(todo.dateStr);
 }
 
 function nextDay(dateStr: string): string {
@@ -114,10 +100,6 @@ function nextDay(dateStr: string): string {
   const mm = String(date.getMonth() + 1).padStart(2, "0");
   const dd = String(date.getDate()).padStart(2, "0");
   return `${yy}-${mm}-${dd}`;
-}
-
-function dayBackgroundExportKey(dateStr: string): string {
-  return `bg:${dateStr}`;
 }
 
 function loadExportMap(): Record<string, string> {
@@ -258,6 +240,23 @@ async function postCalendarEvent(
   return data.id;
 }
 
+async function deleteCalendarEvent(
+  accessToken: string,
+  eventId: string
+): Promise<boolean> {
+  const res = await fetch(
+    `https://www.googleapis.com/calendar/v3/calendars/primary/events/${encodeURIComponent(eventId)}`,
+    {
+      method: "DELETE",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    }
+  );
+  // 204 success, 404/410 already gone
+  return res.ok || res.status === 404 || res.status === 410;
+}
+
 async function insertAllDayEvent(
   accessToken: string,
   todo: TodoItem,
@@ -269,7 +268,6 @@ async function insertAllDayEvent(
       ? "Kizuna Calendar からエクスポート（完了済み）"
       : "Kizuna Calendar からエクスポート",
     start: { date: todo.dateStr },
-    // All-day end is exclusive
     end: { date: nextDay(todo.dateStr) },
     extendedProperties: {
       private: {
@@ -287,41 +285,6 @@ async function insertAllDayEvent(
   return postCalendarEvent(accessToken, body);
 }
 
-/**
- * Google Calendar has no day-cell background API. Approximate Tomy's date
- * background with a colored all-day event for that date.
- */
-async function insertDayBackgroundEvent(
-  accessToken: string,
-  entry: DateColor
-): Promise<string> {
-  const color = entry.color;
-  if (!color) {
-    throw new Error("背景色がありません");
-  }
-  const colorId = DATE_COLOR_TO_GOOGLE_EVENT_ID[color];
-  const colorLabel = DATE_COLOR_LABEL_JA[color];
-  const summary =
-    entry.label?.trim() || `■ 背景色（${colorLabel}）`;
-
-  return postCalendarEvent(accessToken, {
-    summary,
-    description: `Kizuna Calendar の日付背景色（${colorLabel}）`,
-    start: { date: entry.dateStr },
-    end: { date: nextDay(entry.dateStr) },
-    colorId,
-    // Keep it visible as a day band without blocking free/busy harshly
-    transparency: "transparent",
-    extendedProperties: {
-      private: {
-        source: "kizuna-calendar",
-        kizunaDayBackground: entry.dateStr,
-        kizunaDateColor: color,
-      },
-    },
-  });
-}
-
 function resolveGoogleColorId(
   dateStr: string,
   dateColors: DateColor[]
@@ -332,27 +295,36 @@ function resolveGoogleColorId(
   return DATE_COLOR_TO_GOOGLE_EVENT_ID[color];
 }
 
-function collectBackgroundEntries(
-  todos: TodoItem[],
-  dateColors: DateColor[],
-  exportAllProvidedDayColors: boolean
-): DateColor[] {
-  const withColor = dateColors.filter(
-    (dc) => dc.color && isDateStr(dc.dateStr)
-  );
-
-  if (exportAllProvidedDayColors) {
-    return withColor;
+/**
+ * Remove previously created "■ 背景色" placeholder events tracked in localStorage.
+ * Google Calendar cannot paint day cells; those placeholders looked like tasks.
+ */
+async function cleanupDayBackgroundPlaceholders(
+  accessToken: string,
+  exportMap: Record<string, string>
+): Promise<number> {
+  let cleaned = 0;
+  const keys = Object.keys(exportMap).filter((key) => key.startsWith("bg:"));
+  for (const key of keys) {
+    const eventId = exportMap[key];
+    try {
+      await deleteCalendarEvent(accessToken, eventId);
+      delete exportMap[key];
+      cleaned += 1;
+    } catch (error) {
+      logger.warn("Failed to delete background placeholder:", key, error);
+      delete exportMap[key];
+    }
   }
-
-  const dateSet = new Set(todos.filter(isDateTask).map((t) => t.dateStr));
-  return withColor.filter((dc) => dateSet.has(dc.dateStr));
+  if (cleaned > 0) {
+    saveExportMap(exportMap);
+  }
+  return cleaned;
 }
 
 /**
- * Export date-based todos to the signed-in user's primary Google Calendar
- * as all-day events. Also creates colored all-day "background" events so
- * Tomy date colors are visible in Google Calendar.
+ * Export date-based todos as all-day events.
+ * Day colors are applied via event colorId only (no fake background events).
  */
 export async function exportTodosToGoogleCalendar(
   todos: TodoItem[],
@@ -360,26 +332,27 @@ export async function exportTodosToGoogleCalendar(
   options: GoogleExportOptions = {}
 ): Promise<GoogleExportResult> {
   const targets = todos.filter(isDateTask);
-  const backgroundEntries = collectBackgroundEntries(
-    targets,
-    dateColors,
-    Boolean(options.exportAllProvidedDayColors)
-  );
-
   const result: GoogleExportResult = {
     created: 0,
     skipped: 0,
     failed: 0,
     errors: [],
+    cleanedBackgrounds: 0,
   };
 
-  if (targets.length === 0 && backgroundEntries.length === 0) {
+  if (targets.length === 0) {
     return result;
   }
 
   const accessToken = await requestAccessToken();
   const exportMap = loadExportMap();
   const force = Boolean(options.force);
+
+  // Clean up old "背景色" placeholder events from earlier approach
+  result.cleanedBackgrounds = await cleanupDayBackgroundPlaceholders(
+    accessToken,
+    exportMap
+  );
 
   for (const todo of targets) {
     if (!force && exportMap[todo.id]) {
@@ -398,26 +371,6 @@ export async function exportTodosToGoogleCalendar(
       const message = error instanceof Error ? error.message : String(error);
       result.errors.push(`${todo.text}: ${message}`);
       logger.error("Google Calendar export failed:", todo.id, error);
-    }
-  }
-
-  for (const entry of backgroundEntries) {
-    const key = dayBackgroundExportKey(entry.dateStr);
-    if (!force && exportMap[key]) {
-      result.skipped += 1;
-      continue;
-    }
-
-    try {
-      const eventId = await insertDayBackgroundEvent(accessToken, entry);
-      exportMap[key] = eventId;
-      saveExportMap(exportMap);
-      result.created += 1;
-    } catch (error) {
-      result.failed += 1;
-      const message = error instanceof Error ? error.message : String(error);
-      result.errors.push(`背景色 ${entry.dateStr}: ${message}`);
-      logger.error("Google Calendar background export failed:", entry.dateStr, error);
     }
   }
 

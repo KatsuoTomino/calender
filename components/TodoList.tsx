@@ -515,9 +515,13 @@ const TodoList: React.FC<TodoListProps> = ({
     setIsExportingToGoogle(true);
     try {
       const result = await exportTodosToGoogleCalendar(todos, dateColors, {
-        exportAllProvidedDayColors: showGoogleExport,
         force,
       });
+      if (result.cleanedBackgrounds && result.cleanedBackgrounds > 0) {
+        showToast(
+          `以前の「背景色」予定を ${result.cleanedBackgrounds}件削除しました`
+        );
+      }
       if (result.created > 0 && result.failed === 0) {
         const skipNote =
           result.skipped > 0 ? `（スキップ ${result.skipped}件）` : "";
@@ -530,13 +534,23 @@ const TodoList: React.FC<TodoListProps> = ({
           "error"
         );
       } else if (result.skipped > 0 && result.failed === 0) {
-        showConfirmModal(
-          "すでに追加済みです",
-          "この内容は以前このブラウザからGoogleカレンダーへ追加済みのためスキップされました。\nもう一度追加しますか？（Google側に同じ予定が重複する可能性があります）",
-          async () => {
-            closeConfirmModal();
-            await runGoogleExport(true);
-          }
+        if (result.cleanedBackgrounds && result.cleanedBackgrounds > 0) {
+          showToast(
+            `「背景色」予定を整理しました。タスクは追加済みのためスキップしました`
+          );
+        } else {
+          showConfirmModal(
+            "すでに追加済みです",
+            "この内容は以前このブラウザからGoogleカレンダーへ追加済みのためスキップされました。\nもう一度追加しますか？（Google側に同じ予定が重複する可能性があります）",
+            async () => {
+              closeConfirmModal();
+              await runGoogleExport(true);
+            }
+          );
+        }
+      } else if (result.cleanedBackgrounds && result.cleanedBackgrounds > 0) {
+        showToast(
+          `以前の「背景色」予定を ${result.cleanedBackgrounds}件削除しました`
         );
       } else {
         showToast(
@@ -570,11 +584,8 @@ const TodoList: React.FC<TodoListProps> = ({
     }
 
     if (todos.length === 0) {
-      const hasDayColors = dateColors.some((dc) => Boolean(dc.color));
-      if (!hasDayColors) {
-        showToast("追加するタスクがありません", "error");
-        return;
-      }
+      showToast("追加するタスクがありません", "error");
+      return;
     }
 
     await runGoogleExport(false);

@@ -514,9 +514,7 @@ const TodoList: React.FC<TodoListProps> = ({
   const runGoogleExport = async (force = false) => {
     setIsExportingToGoogle(true);
     try {
-      const result = await exportTodosToGoogleCalendar(todos, dateColors, {
-        force,
-      });
+      const result = await exportTodosToGoogleCalendar(todos, { force });
       if (result.cleanedBackgrounds && result.cleanedBackgrounds > 0) {
         showToast(
           `以前の「背景色」予定を ${result.cleanedBackgrounds}件削除しました`

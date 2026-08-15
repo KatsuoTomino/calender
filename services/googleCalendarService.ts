@@ -3,35 +3,15 @@
  * Docs:
  * - https://developers.google.com/identity/oauth2/web/guides/use-token-model
  * - https://developers.google.com/calendar/api/v3/reference/events/insert
- * - https://developers.google.com/calendar/api/v3/reference/colors
  */
 
-import { TodoItem, DateColor, DateColorType } from "../types";
+import { TodoItem } from "../types";
 import { logger } from "./logger";
 
 const GIS_SCRIPT_SRC = "https://accounts.google.com/gsi/client";
 const CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar.events";
 const EXPORT_STORAGE_KEY = "kizuna_google_calendar_exports";
 const CONNECTED_FLAG_KEY = "kizuna_google_calendar_connected";
-
-/**
- * Map Tomy's date cell colors to Google Calendar event colorId.
- * Common event IDs: 1 Lavender, 2 Sage, 3 Grape, 4 Flamingo, 5 Banana,
- * 6 Tangerine, 7 Peacock, 8 Graphite, 9 Blueberry, 10 Basil, 11 Tomato
- *
- * Note: Google Calendar has no API to paint a day-cell background like Tomy's
- * calendar. Only event colorId is supported.
- */
-const DATE_COLOR_TO_GOOGLE_EVENT_ID: Record<
-  Exclude<DateColorType, null>,
-  string
-> = {
-  red: "11", // Tomato
-  yellow: "5", // Banana
-  blue: "9", // Blueberry
-  green: "10", // Basil
-  purple: "3", // Grape
-};
 
 type TokenClient = {
   requestAccessToken: (overrideConfig?: { prompt?: string }) => void;
@@ -212,10 +192,41 @@ function requestAccessToken(): Promise<string> {
   });
 }
 
-async function postCalendarEvent(
+async function deleteCalendarEvent(
   accessToken: string,
-  body: Record<string, unknown>
+  eventId: string
+): Promise<boolean> {
+  const res = await fetch(
+    `https://www.googleapis.com/calendar/v3/calendars/primary/events/${encodeURIComponent(eventId)}`,
+    {
+      method: "DELETE",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    }
+  );
+  return res.ok || res.status === 404 || res.status === 410;
+}
+
+async function insertAllDayEvent(
+  accessToken: string,
+  todo: TodoItem
 ): Promise<string> {
+  const body = {
+    summary: todo.text,
+    description: todo.completed
+      ? "Kizuna Calendar からエクスポート（完了済み）"
+      : "Kizuna Calendar からエクスポート",
+    start: { date: todo.dateStr },
+    end: { date: nextDay(todo.dateStr) },
+    extendedProperties: {
+      private: {
+        kizunaTodoId: todo.id,
+        source: "kizuna-calendar",
+      },
+    },
+  };
+
   const res = await fetch(
     "https://www.googleapis.com/calendar/v3/calendars/primary/events",
     {
@@ -240,64 +251,8 @@ async function postCalendarEvent(
   return data.id;
 }
 
-async function deleteCalendarEvent(
-  accessToken: string,
-  eventId: string
-): Promise<boolean> {
-  const res = await fetch(
-    `https://www.googleapis.com/calendar/v3/calendars/primary/events/${encodeURIComponent(eventId)}`,
-    {
-      method: "DELETE",
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-      },
-    }
-  );
-  // 204 success, 404/410 already gone
-  return res.ok || res.status === 404 || res.status === 410;
-}
-
-async function insertAllDayEvent(
-  accessToken: string,
-  todo: TodoItem,
-  colorId?: string
-): Promise<string> {
-  const body: Record<string, unknown> = {
-    summary: todo.text,
-    description: todo.completed
-      ? "Kizuna Calendar からエクスポート（完了済み）"
-      : "Kizuna Calendar からエクスポート",
-    start: { date: todo.dateStr },
-    end: { date: nextDay(todo.dateStr) },
-    extendedProperties: {
-      private: {
-        kizunaTodoId: todo.id,
-        source: "kizuna-calendar",
-        ...(colorId ? { kizunaDateColor: colorId } : {}),
-      },
-    },
-  };
-
-  if (colorId) {
-    body.colorId = colorId;
-  }
-
-  return postCalendarEvent(accessToken, body);
-}
-
-function resolveGoogleColorId(
-  dateStr: string,
-  dateColors: DateColor[]
-): string | undefined {
-  const entry = dateColors.find((dc) => dc.dateStr === dateStr);
-  const color = entry?.color;
-  if (!color) return undefined;
-  return DATE_COLOR_TO_GOOGLE_EVENT_ID[color];
-}
-
 /**
- * Remove previously created "■ 背景色" placeholder events tracked in localStorage.
- * Google Calendar cannot paint day cells; those placeholders looked like tasks.
+ * Remove leftover "■ 背景色" placeholder events from an earlier experiment.
  */
 async function cleanupDayBackgroundPlaceholders(
   accessToken: string,
@@ -323,12 +278,12 @@ async function cleanupDayBackgroundPlaceholders(
 }
 
 /**
- * Export date-based todos as all-day events.
- * Day colors are applied via event colorId only (no fake background events).
+ * Export date-based todos to the signed-in user's primary Google Calendar
+ * as all-day events. Skips todos already exported from this browser.
+ * Date/background colors are intentionally not synced.
  */
 export async function exportTodosToGoogleCalendar(
   todos: TodoItem[],
-  dateColors: DateColor[] = [],
   options: GoogleExportOptions = {}
 ): Promise<GoogleExportResult> {
   const targets = todos.filter(isDateTask);
@@ -348,7 +303,6 @@ export async function exportTodosToGoogleCalendar(
   const exportMap = loadExportMap();
   const force = Boolean(options.force);
 
-  // Clean up old "背景色" placeholder events from earlier approach
   result.cleanedBackgrounds = await cleanupDayBackgroundPlaceholders(
     accessToken,
     exportMap
@@ -361,8 +315,7 @@ export async function exportTodosToGoogleCalendar(
     }
 
     try {
-      const colorId = resolveGoogleColorId(todo.dateStr, dateColors);
-      const eventId = await insertAllDayEvent(accessToken, todo, colorId);
+      const eventId = await insertAllDayEvent(accessToken, todo);
       exportMap[todo.id] = eventId;
       saveExportMap(exportMap);
       result.created += 1;

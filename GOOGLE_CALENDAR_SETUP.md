@@ -36,8 +36,6 @@ VITE_GOOGLE_CLIENT_ID=あなたのクライアントID.apps.googleusercontent.co
 4. その日の日付タスクが終日予定として作成される
 
 - 同じブラウザでは、一度追加したタスクは重複追加されません（localStorage に記録）。
-- 日付に色が付いている場合、各**タスク予定**の色を近似します（赤→Tomato / 黄→Banana / 青→Blueberry / 緑→Basil / 紫→Grape）
-- Googleカレンダーには日付マスの塗り機能がないため、Tomy's のようなセル背景色そのものは再現できません
 
 ## 注意
 

@@ -511,6 +511,52 @@ const TodoList: React.FC<TodoListProps> = ({
     );
   };
 
+  const runGoogleExport = async (force = false) => {
+    setIsExportingToGoogle(true);
+    try {
+      const result = await exportTodosToGoogleCalendar(todos, dateColors, {
+        exportAllProvidedDayColors: showGoogleExport,
+        force,
+      });
+      if (result.created > 0 && result.failed === 0) {
+        const skipNote =
+          result.skipped > 0 ? `（スキップ ${result.skipped}件）` : "";
+        showToast(
+          `Googleカレンダーに ${result.created}件追加しました${skipNote}`
+        );
+      } else if (result.created > 0) {
+        showToast(
+          `${result.created}件追加、${result.failed}件失敗`,
+          "error"
+        );
+      } else if (result.skipped > 0 && result.failed === 0) {
+        showConfirmModal(
+          "すでに追加済みです",
+          "この内容は以前このブラウザからGoogleカレンダーへ追加済みのためスキップされました。\nもう一度追加しますか？（Google側に同じ予定が重複する可能性があります）",
+          async () => {
+            closeConfirmModal();
+            await runGoogleExport(true);
+          }
+        );
+      } else {
+        showToast(
+          result.errors[0] || "Googleカレンダーへの追加に失敗しました",
+          "error"
+        );
+      }
+    } catch (error) {
+      logger.error("Google Calendar export error:", error);
+      showToast(
+        error instanceof Error
+          ? error.message
+          : "Googleカレンダーへの追加に失敗しました",
+        "error"
+      );
+    } finally {
+      setIsExportingToGoogle(false);
+    }
+  };
+
   const handleExportToGoogleCalendar = async () => {
     const canExportDay = Boolean(date) && !dateStr;
     if (!canExportDay && !showGoogleExport) return;
@@ -531,41 +577,7 @@ const TodoList: React.FC<TodoListProps> = ({
       }
     }
 
-    setIsExportingToGoogle(true);
-    try {
-      const result = await exportTodosToGoogleCalendar(todos, dateColors, {
-        exportAllProvidedDayColors: showGoogleExport,
-      });
-      if (result.created > 0 && result.failed === 0) {
-        const skipNote =
-          result.skipped > 0 ? `（スキップ ${result.skipped}件）` : "";
-        showToast(
-          `Googleカレンダーに ${result.created}件追加しました${skipNote}`
-        );
-      } else if (result.created > 0) {
-        showToast(
-          `${result.created}件追加、${result.failed}件失敗`,
-          "error"
-        );
-      } else if (result.skipped > 0 && result.failed === 0) {
-        showToast("すべて追加済みです（スキップしました）");
-      } else {
-        showToast(
-          result.errors[0] || "Googleカレンダーへの追加に失敗しました",
-          "error"
-        );
-      }
-    } catch (error) {
-      logger.error("Google Calendar export error:", error);
-      showToast(
-        error instanceof Error
-          ? error.message
-          : "Googleカレンダーへの追加に失敗しました",
-        "error"
-      );
-    } finally {
-      setIsExportingToGoogle(false);
-    }
+    await runGoogleExport(false);
   };
 
   const canShowGoogleExport =
@@ -1055,7 +1067,7 @@ const TodoList: React.FC<TodoListProps> = ({
             <h3 className="text-lg font-bold text-slate-800 mb-2">
               {confirmModal.title}
             </h3>
-            <p className="text-slate-600 mb-6">{confirmModal.message}</p>
+            <p className="text-slate-600 mb-6 whitespace-pre-line">{confirmModal.message}</p>
             <div className="flex gap-3 justify-end">
               <button
                 onClick={closeConfirmModal}

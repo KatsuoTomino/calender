@@ -83,6 +83,11 @@ export type GoogleExportOptions = {
    * in the exported todos get a background event.
    */
   exportAllProvidedDayColors?: boolean;
+  /**
+   * When true, ignore the local "already exported" cache and create events
+   * again (may duplicate on Google Calendar).
+   */
+  force?: boolean;
 };
 
 function getClientId(): string {
@@ -374,9 +379,10 @@ export async function exportTodosToGoogleCalendar(
 
   const accessToken = await requestAccessToken();
   const exportMap = loadExportMap();
+  const force = Boolean(options.force);
 
   for (const todo of targets) {
-    if (exportMap[todo.id]) {
+    if (!force && exportMap[todo.id]) {
       result.skipped += 1;
       continue;
     }
@@ -397,7 +403,7 @@ export async function exportTodosToGoogleCalendar(
 
   for (const entry of backgroundEntries) {
     const key = dayBackgroundExportKey(entry.dateStr);
-    if (exportMap[key]) {
+    if (!force && exportMap[key]) {
       result.skipped += 1;
       continue;
     }
@@ -416,4 +422,9 @@ export async function exportTodosToGoogleCalendar(
   }
 
   return result;
+}
+
+/** Clear local export cache so the next export is not skipped. */
+export function clearGoogleCalendarExportHistory(): void {
+  localStorage.removeItem(EXPORT_STORAGE_KEY);
 }

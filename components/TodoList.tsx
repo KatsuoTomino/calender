@@ -7,6 +7,7 @@ import {
   deleteTodoFromGoogleCalendar,
   exportTodosToGoogleCalendar,
   getGoogleExportedTodoIds,
+  GoogleImportCandidate,
   hasGoogleCalendarEvent,
   isGoogleCalendarConfigured,
   linkTodoToGoogleEvent,
@@ -230,6 +231,10 @@ const TodoList: React.FC<TodoListProps> = ({
   const [isDeleting, setIsDeleting] = useState(false);
   const [isExportingToGoogle, setIsExportingToGoogle] = useState(false);
   const [isImportingFromGoogle, setIsImportingFromGoogle] = useState(false);
+  const [importPreview, setImportPreview] = useState<{
+    candidates: GoogleImportCandidate[];
+    skippedMatched: number;
+  } | null>(null);
   /** Bump after export so Google checkmarks re-read localStorage. */
   const [googleExportTick, setGoogleExportTick] = useState(0);
 
@@ -297,6 +302,9 @@ const TodoList: React.FC<TodoListProps> = ({
         if (expandedImage) {
           setExpandedImage(null);
         }
+        if (importPreview) {
+          setImportPreview(null);
+        }
         if (confirmModal.isOpen) {
           setConfirmModal((prev) => ({ ...prev, isOpen: false }));
         }
@@ -304,7 +312,7 @@ const TodoList: React.FC<TodoListProps> = ({
     };
     window.addEventListener("keydown", handleEscape);
     return () => window.removeEventListener("keydown", handleEscape);
-  }, [expandedImage, confirmModal.isOpen]);
+  }, [expandedImage, confirmModal.isOpen, importPreview]);
 
   // 通知トーストを表示
   const showToast = (message: string, type: "success" | "error" = "success") => {
@@ -702,44 +710,79 @@ const TodoList: React.FC<TodoListProps> = ({
     setGoogleExportTick((n) => n + 1);
   };
 
-  const runGoogleImport = async () => {
+  const applyGoogleImport = async (candidates: GoogleImportCandidate[]) => {
+    for (const candidate of candidates) {
+      const todo: TodoItem = {
+        id: generateId(),
+        dateStr: candidate.dateStr,
+        text: candidate.text,
+        completed: false,
+        createdBy: currentUser.id,
+      };
+      onAddTodo(todo);
+      linkTodoToGoogleEvent(todo.id, candidate.eventId);
+    }
+    setGoogleExportTick((n) => n + 1);
+  };
+
+  const handleImportFromGoogleCalendar = async () => {
     if (!googleImportMonth) return;
+
+    if (!isGoogleCalendarConfigured()) {
+      showToast(
+        "Google連携が未設定です（VITE_GOOGLE_CLIENT_ID）",
+        "error"
+      );
+      return;
+    }
+
     setIsImportingFromGoogle(true);
     try {
-      // Append-only: never updates/deletes existing app todos.
+      // Fetch candidates first, then show preview — never mutates existing todos.
       const result = await listGoogleCalendarEventsToImport(
         googleImportMonth.year,
         googleImportMonth.month,
         todos
       );
 
-      for (const candidate of result.toImport) {
-        const todo: TodoItem = {
-          id: generateId(),
-          dateStr: candidate.dateStr,
-          text: candidate.text,
-          completed: false,
-          createdBy: currentUser.id,
-        };
-        onAddTodo(todo);
-        linkTodoToGoogleEvent(todo.id, candidate.eventId);
+      if (result.toImport.length === 0) {
+        if (result.skippedMatched > 0) {
+          showToast("取り込む新規予定はありません（既存と一致）");
+        } else {
+          showToast("この月のGカレに取り込む予定がありません");
+        }
+        return;
       }
 
-      setGoogleExportTick((n) => n + 1);
+      setImportPreview({
+        candidates: result.toImport,
+        skippedMatched: result.skippedMatched,
+      });
+    } catch (error) {
+      logger.error("Google Calendar import preview error:", error);
+      showToast(
+        error instanceof Error
+          ? error.message
+          : "Gカレ予定の取得に失敗しました",
+        "error"
+      );
+    } finally {
+      setIsImportingFromGoogle(false);
+    }
+  };
 
-      if (result.toImport.length > 0) {
-        const skipNote =
-          result.skippedMatched > 0
-            ? `（既存一致 ${result.skippedMatched}件はスキップ）`
-            : "";
-        showToast(
-          `Gカレから ${result.toImport.length}件取り込みました${skipNote}`
-        );
-      } else if (result.skippedMatched > 0) {
-        showToast("取り込む新規予定はありません（既存と一致）");
-      } else {
-        showToast("この月のGカレに取り込む予定がありません");
-      }
+  const handleConfirmGoogleImport = async () => {
+    if (!importPreview || importPreview.candidates.length === 0) return;
+    const { candidates, skippedMatched } = importPreview;
+    setIsImportingFromGoogle(true);
+    try {
+      await applyGoogleImport(candidates);
+      setImportPreview(null);
+      const skipNote =
+        skippedMatched > 0
+          ? `（既存一致 ${skippedMatched}件はスキップ）`
+          : "";
+      showToast(`Gカレから ${candidates.length}件取り込みました${skipNote}`);
     } catch (error) {
       logger.error("Google Calendar import error:", error);
       showToast(
@@ -751,32 +794,6 @@ const TodoList: React.FC<TodoListProps> = ({
     } finally {
       setIsImportingFromGoogle(false);
     }
-  };
-
-  const handleImportFromGoogleCalendar = () => {
-    if (!googleImportMonth) return;
-
-    if (!isGoogleCalendarConfigured()) {
-      showToast(
-        "Google連携が未設定です（VITE_GOOGLE_CLIENT_ID）",
-        "error"
-      );
-      return;
-    }
-
-    showConfirmModal(
-      "Gカレから取り込む",
-      `${googleImportMonth.year}年${googleImportMonth.month}月のGoogleカレンダー予定を取り込みます。\n\n・アプリにない予定だけ追加します\n・既存のタスクは変更・削除しません\n・Google側の予定も削除しません`,
-      () => {
-        closeConfirmModal();
-        void runGoogleImport();
-      },
-      {
-        confirmLabel: "取り込む",
-        confirmBusyLabel: "取込中...",
-        confirmTone: "primary",
-      }
-    );
   };
 
   const formatTodoDateLabel = (value: string): string => {
@@ -832,7 +849,11 @@ const TodoList: React.FC<TodoListProps> = ({
                   />
                 </svg>
                 <span className="whitespace-nowrap">
-                  {isImportingFromGoogle ? "取込中…" : "Gカレ取込"}
+                  {isImportingFromGoogle
+                    ? importPreview
+                      ? "取込中…"
+                      : "取得中…"
+                    : "Gカレ取込"}
                 </span>
               </button>
             )}
@@ -1325,6 +1346,71 @@ const TodoList: React.FC<TodoListProps> = ({
               className="max-w-full max-h-[90vh] sm:max-h-[80vh] w-auto h-auto object-contain rounded-lg shadow-2xl touch-manipulation"
               style={{ userSelect: 'none' }}
             />
+          </div>
+        </div>
+      )}
+
+      {/* Gカレ取込プレビューモーダル */}
+      {importPreview && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm"
+          onClick={() => {
+            if (!isImportingFromGoogle) setImportPreview(null);
+          }}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-xl p-6 m-4 max-w-md w-full max-h-[85vh] flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-lg font-bold text-slate-800 mb-1 shrink-0">
+              これらの予定を取り込みますか？
+            </h3>
+            <p className="text-xs text-slate-500 mb-3 shrink-0">
+              {googleImportMonth
+                ? `${googleImportMonth.year}年${googleImportMonth.month}月・${importPreview.candidates.length}件`
+                : `${importPreview.candidates.length}件`}
+              （既存タスクは変更・削除しません）
+            </p>
+            <ul className="flex-1 min-h-0 overflow-y-auto border border-slate-100 rounded-xl divide-y divide-slate-50 mb-4">
+              {importPreview.candidates.map((item) => (
+                <li
+                  key={item.eventId}
+                  className="flex items-start gap-2 px-3 py-2.5 text-sm"
+                >
+                  <span className="shrink-0 mt-0.5 px-1.5 py-0.5 rounded bg-slate-100 text-[10px] font-medium text-slate-500 tabular-nums">
+                    {formatTodoDateLabel(item.dateStr)}
+                  </span>
+                  <span className="text-slate-700 break-words min-w-0">
+                    {item.text}
+                  </span>
+                </li>
+              ))}
+            </ul>
+            {importPreview.skippedMatched > 0 && (
+              <p className="text-[11px] text-slate-400 mb-3 shrink-0">
+                既存と一致した {importPreview.skippedMatched}件は一覧に含めていません
+              </p>
+            )}
+            <div className="flex gap-2 justify-end flex-wrap shrink-0">
+              <button
+                type="button"
+                onClick={() => setImportPreview(null)}
+                className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+                disabled={isImportingFromGoogle}
+              >
+                キャンセル
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleConfirmGoogleImport()}
+                disabled={isImportingFromGoogle}
+                className="px-4 py-2 bg-sky-500 text-white rounded-lg hover:bg-sky-600 transition-colors disabled:opacity-50"
+              >
+                {isImportingFromGoogle
+                  ? "取込中..."
+                  : `${importPreview.candidates.length}件取り込む`}
+              </button>
+            </div>
           </div>
         </div>
       )}

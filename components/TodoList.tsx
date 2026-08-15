@@ -4,8 +4,10 @@ import { generateId } from "../services/storageService";
 import { uploadImageToR2, getImageUrl, deleteImageFromR2 } from "../services/r2Service";
 import { logger } from "../services/logger";
 import {
+  deleteTodoFromGoogleCalendar,
   exportTodosToGoogleCalendar,
   getGoogleExportedTodoIds,
+  hasGoogleCalendarEvent,
   isGoogleCalendarConfigured,
   setGoogleCalendarExportMark,
 } from "../services/googleCalendarService";
@@ -41,6 +43,8 @@ interface ConfirmModalState {
   onConfirm: () => void;
   confirmLabel: string;
   confirmBusyLabel: string;
+  secondaryLabel?: string;
+  onSecondary?: () => void;
 }
 
 // 通知トーストの型
@@ -305,7 +309,12 @@ const TodoList: React.FC<TodoListProps> = ({
     title: string,
     message: string,
     onConfirm: () => void,
-    options?: { confirmLabel?: string; confirmBusyLabel?: string }
+    options?: {
+      confirmLabel?: string;
+      confirmBusyLabel?: string;
+      secondaryLabel?: string;
+      onSecondary?: () => void;
+    }
   ) => {
     setConfirmModal({
       isOpen: true,
@@ -314,6 +323,8 @@ const TodoList: React.FC<TodoListProps> = ({
       onConfirm,
       confirmLabel: options?.confirmLabel ?? "削除する",
       confirmBusyLabel: options?.confirmBusyLabel ?? "削除中...",
+      secondaryLabel: options?.secondaryLabel,
+      onSecondary: options?.onSecondary,
     });
   };
 
@@ -503,26 +514,87 @@ const TodoList: React.FC<TodoListProps> = ({
     );
   };
 
+  const performDeleteTodo = async (
+    todoId: string,
+    options: { alsoDeleteFromGoogle: boolean }
+  ) => {
+    const todo = todos.find((t) => t.id === todoId);
+    const hadGoogleEvent = hasGoogleCalendarEvent(todoId);
+    closeConfirmModal();
+    setIsDeleting(true);
+
+    try {
+      if (options.alsoDeleteFromGoogle && hadGoogleEvent) {
+        try {
+          const result = await deleteTodoFromGoogleCalendar(todoId);
+          if (result.deleted) {
+            setGoogleExportTick((n) => n + 1);
+          }
+        } catch (error) {
+          logger.error("Google Calendar delete error:", error);
+          showToast(
+            error instanceof Error
+              ? error.message
+              : "Gカレからの削除に失敗したため、タスクは残しています",
+            "error"
+          );
+          return;
+        }
+      } else {
+        // Clear local Gカレ mark even when keeping the Google event
+        setGoogleCalendarExportMark(todoId, false);
+        setGoogleExportTick((n) => n + 1);
+      }
+
+      if (todo?.imageUrls && todo.imageUrls.length > 0) {
+        for (const imageKey of todo.imageUrls) {
+          try {
+            await deleteImageFromR2(imageKey);
+          } catch {
+            /* ignore */
+          }
+        }
+      }
+
+      onDeleteTodo(todoId);
+      showToast(
+        options.alsoDeleteFromGoogle && hadGoogleEvent
+          ? "タスクとGカレの予定を削除しました"
+          : "タスクを削除しました"
+      );
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
   const handleDeleteTodo = (todoId: string) => {
     const todo = todos.find((t) => t.id === todoId);
+    const linkedToGoogle = hasGoogleCalendarEvent(todoId);
+
+    if (linkedToGoogle) {
+      showConfirmModal(
+        "タスクを削除",
+        `「${todo?.text || "このタスク"}」を削除しますか？\n\nGカレにも予定があります。Googleカレンダーからも削除しますか？`,
+        () => {
+          void performDeleteTodo(todoId, { alsoDeleteFromGoogle: true });
+        },
+        {
+          confirmLabel: "両方削除",
+          confirmBusyLabel: "削除中...",
+          secondaryLabel: "アプリのみ",
+          onSecondary: () => {
+            void performDeleteTodo(todoId, { alsoDeleteFromGoogle: false });
+          },
+        }
+      );
+      return;
+    }
+
     showConfirmModal(
       "タスクを削除",
       `「${todo?.text || "このタスク"}」を削除しますか？`,
-      async () => {
-        closeConfirmModal();
-        setIsDeleting(true);
-
-        // タスクに画像がある場合はR2からも削除
-        if (todo?.imageUrls && todo.imageUrls.length > 0) {
-          for (const imageKey of todo.imageUrls) {
-            try { await deleteImageFromR2(imageKey); } catch { /* ignore */ }
-          }
-        }
-
-        // タスクを削除
-        onDeleteTodo(todoId);
-        setIsDeleting(false);
-        showToast("タスクを削除しました");
+      () => {
+        void performDeleteTodo(todoId, { alsoDeleteFromGoogle: false });
       }
     );
   };
@@ -1149,7 +1221,7 @@ const TodoList: React.FC<TodoListProps> = ({
               {confirmModal.title}
             </h3>
             <p className="text-slate-600 mb-6 whitespace-pre-line">{confirmModal.message}</p>
-            <div className="flex gap-3 justify-end">
+            <div className="flex gap-2 justify-end flex-wrap">
               <button
                 onClick={closeConfirmModal}
                 className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
@@ -1157,6 +1229,15 @@ const TodoList: React.FC<TodoListProps> = ({
               >
                 キャンセル
               </button>
+              {confirmModal.secondaryLabel && confirmModal.onSecondary && (
+                <button
+                  onClick={confirmModal.onSecondary}
+                  disabled={isDeleting}
+                  className="px-4 py-2 text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors disabled:opacity-50"
+                >
+                  {confirmModal.secondaryLabel}
+                </button>
+              )}
               <button
                 onClick={confirmModal.onConfirm}
                 disabled={isDeleting}

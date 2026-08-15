@@ -37,6 +37,7 @@ VITE_GOOGLE_CLIENT_ID=あなたのクライアントID.apps.googleusercontent.co
 
 - 追加済みの判定はこのブラウザの localStorage に保存されます（別端末・別ブラウザでは共有されません）
 - チェックの付け外しはローカルの印だけで、Google 側の予定は作成・削除しません
+- Gカレに追加済みのタスクを削除するときは、Googleカレンダーからも消すか確認します
 
 ## 注意
 

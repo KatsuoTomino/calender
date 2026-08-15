@@ -344,6 +344,51 @@ export function getGoogleExportedTodoIds(): Set<string> {
   );
 }
 
+const LOCAL_MARK_EVENT_ID = "local-mark";
+
+/** Real Google event id if this todo was exported (not a manual local-only mark). */
+export function getGoogleCalendarEventId(todoId: string): string | null {
+  const eventId = loadExportMap()[todoId];
+  if (!eventId || eventId === LOCAL_MARK_EVENT_ID || eventId.startsWith("bg:")) {
+    return null;
+  }
+  return eventId;
+}
+
+export function hasGoogleCalendarEvent(todoId: string): boolean {
+  return Boolean(getGoogleCalendarEventId(todoId));
+}
+
+/**
+ * Delete the linked Google Calendar event for a todo (if any) and clear the
+ * local export mark. Manual local-mark entries are cleared without an API call.
+ */
+export async function deleteTodoFromGoogleCalendar(
+  todoId: string
+): Promise<{ deleted: boolean; skipped: boolean }> {
+  const exportMap = loadExportMap();
+  const eventId = exportMap[todoId];
+
+  if (!eventId) {
+    return { deleted: false, skipped: true };
+  }
+
+  if (eventId === LOCAL_MARK_EVENT_ID) {
+    delete exportMap[todoId];
+    saveExportMap(exportMap);
+    return { deleted: false, skipped: true };
+  }
+
+  const accessToken = await requestAccessToken();
+  const ok = await deleteCalendarEvent(accessToken, eventId);
+  if (!ok) {
+    throw new Error("Googleカレンダーの予定を削除できませんでした");
+  }
+  delete exportMap[todoId];
+  saveExportMap(exportMap);
+  return { deleted: true, skipped: false };
+}
+
 /**
  * Set or clear the local "already exported / skip" mark for one todo.
  * Does not create or delete events on Google Calendar.
@@ -356,7 +401,7 @@ export function setGoogleCalendarExportMark(
   const map = loadExportMap();
   if (marked) {
     if (!map[todoId]) {
-      map[todoId] = "local-mark";
+      map[todoId] = LOCAL_MARK_EVENT_ID;
     }
   } else {
     if (!map[todoId]) return;

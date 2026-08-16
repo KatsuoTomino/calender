@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from "react";
 import { TodoItem, User, DateColor, DateColorType } from "../types";
 import { generateId } from "../services/storageService";
+import { getHolidayName } from "../utils/holidays";
 import { uploadImageToR2, getImageUrl, deleteImageFromR2 } from "../services/r2Service";
 import { logger } from "../services/logger";
 import {
@@ -142,12 +143,12 @@ const DateLabelInput: React.FC<{
       <button
         onClick={() => setIsEditing(true)}
         className="flex items-center gap-1 text-[10px] sm:text-xs text-slate-400 hover:text-slate-600 transition-colors"
-        title="ラベルを追加"
+        title="祝日名 / ラベルを追加"
       >
         <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
         </svg>
-        ラベル
+        祝日名 / ラベル
       </button>
     );
   }
@@ -165,8 +166,8 @@ const DateLabelInput: React.FC<{
             if (e.key === "Enter") handleSubmit();
             if (e.key === "Escape") { setValue(currentLabel); setIsEditing(false); }
           }}
-          placeholder="ラベルを入力"
-          maxLength={10}
+          placeholder="祝日名・ラベル"
+          maxLength={16}
           className="w-24 sm:w-28 px-2 py-0.5 text-[10px] sm:text-xs border border-slate-300 rounded-md focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
         />
       </div>
@@ -177,7 +178,7 @@ const DateLabelInput: React.FC<{
     <button
       onClick={() => setIsEditing(true)}
       className="flex items-center gap-1 text-[10px] sm:text-xs text-slate-600 bg-slate-100 px-2 py-0.5 rounded-md hover:bg-slate-200 transition-colors max-w-[100px] sm:max-w-[120px]"
-      title="ラベルを編集"
+      title="祝日名 / ラベルを編集"
     >
       <span className="truncate">{currentLabel}</span>
       <svg className="w-3 h-3 shrink-0 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -829,14 +830,26 @@ const TodoList: React.FC<TodoListProps> = ({
     return a.completed ? 1 : -1;
   });
 
+  const selectedDateStr = date ? formatLocalDate(date) : "";
+  const dateDisplayName = date
+    ? dateColors.find((dc) => dc.dateStr === selectedDateStr)?.label?.trim() ||
+      getHolidayName(date) ||
+      null
+    : null;
+
   return (
     <div className="h-full flex flex-col bg-white md:rounded-3xl shadow-sm overflow-hidden">
       {/* Header */}
       <div className="p-4 sm:p-6 border-b border-slate-50 bg-gradient-to-r from-white to-pink-50/30 shrink-0">
         <div className="flex justify-between items-center gap-2">
           <div className="min-w-0">
-            <h3 className="text-base sm:text-lg font-bold text-slate-800">
-              {title || (date ? `${date.getMonth() + 1}月${date.getDate()}日の予定` : 'タスク')}
+            <h3 className="text-base sm:text-lg font-bold text-slate-800 truncate">
+              {title ||
+                (date
+                  ? `${date.getMonth() + 1}月${date.getDate()}日${
+                      dateDisplayName ? ` ${dateDisplayName}` : ""
+                    }の予定`
+                  : "タスク")}
             </h3>
             <p className="text-xs text-slate-400">
               {todos.filter((t) => !t.completed).length} tasks remaining
@@ -978,7 +991,12 @@ const TodoList: React.FC<TodoListProps> = ({
             {onSetDateLabel && (
               <DateLabelInput
                 dateStr={formatLocalDate(date)}
-                currentLabel={dateColors.find((dc) => dc.dateStr === formatLocalDate(date))?.label || ""}
+                currentLabel={
+                  dateColors.find((dc) => dc.dateStr === formatLocalDate(date))
+                    ?.label ||
+                  getHolidayName(date) ||
+                  ""
+                }
                 onSetLabel={onSetDateLabel}
               />
             )}

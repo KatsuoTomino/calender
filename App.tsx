@@ -645,6 +645,7 @@ const App: React.FC = () => {
             onOpenMonthSchedule={() => setShowMonthSchedulePanel(true)}
             todos={todos}
             dateColors={dateColors}
+            onSetDateLabel={handleSetDateLabel}
           />
         </div>
 

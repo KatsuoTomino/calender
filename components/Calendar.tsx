@@ -13,6 +13,7 @@ interface CalendarProps {
   onOpenMonthSchedule?: () => void;
   todos: TodoItem[];
   dateColors?: DateColor[];
+  onSetDateLabel?: (dateStr: string, label: string | null) => void;
 }
 
 const Calendar: React.FC<CalendarProps> = ({
@@ -25,12 +26,24 @@ const Calendar: React.FC<CalendarProps> = ({
   onOpenMonthSchedule,
   todos,
   dateColors = [],
+  onSetDateLabel,
 }) => {
   const [showYearMonthPicker, setShowYearMonthPicker] = useState(false);
   const [tempSelectedYear, setTempSelectedYear] = useState<number | null>(null);
   const [tempSelectedMonth, setTempSelectedMonth] = useState<number | null>(null);
+  const [editingDateStr, setEditingDateStr] = useState<string | null>(null);
+  const [editingValue, setEditingValue] = useState("");
   const yearScrollRef = useRef<HTMLDivElement>(null);
   const monthScrollRef = useRef<HTMLDivElement>(null);
+  const labelInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (editingDateStr && labelInputRef.current) {
+      labelInputRef.current.focus();
+      labelInputRef.current.select();
+    }
+  }, [editingDateStr]);
+
   // Generate days for the grid
   const calendarDays = useMemo(() => {
     const year = currentDate.getFullYear();
@@ -43,6 +56,12 @@ const Calendar: React.FC<CalendarProps> = ({
     const daysInMonth = lastDayOfMonth.getDate();
 
     const days: DayData[] = [];
+
+    const labelByDate = new Map<string, string>();
+    for (const dc of dateColors) {
+      const trimmed = dc.label?.trim();
+      if (trimmed) labelByDate.set(dc.dateStr, trimmed);
+    }
 
     // Helper to format date as YYYY-MM-DD in local timezone
     const formatLocalDate = (date: Date): string => {
@@ -62,21 +81,30 @@ const Calendar: React.FC<CalendarProps> = ({
         });
     };
 
+    const buildDay = (
+      d: Date,
+      isCurrentMonth: boolean,
+      isToday: boolean
+    ): DayData => {
+      const dStr = formatLocalDate(d);
+      const officialHoliday = getHolidayName(d);
+      const customLabel = labelByDate.get(dStr) ?? null;
+      return {
+        date: d,
+        isCurrentMonth,
+        isToday,
+        dateStr: dStr,
+        todos: getTodosForDate(dStr),
+        isHoliday: !!officialHoliday,
+        holidayName: customLabel || officialHoliday,
+        isWeekend: isWeekend(d),
+      };
+    };
+
     // Previous month padding
     for (let i = 0; i < startingDayIndex; i++) {
       const d = new Date(year, month, -startingDayIndex + 1 + i);
-      const dStr = formatLocalDate(d);
-      const holidayName = getHolidayName(d);
-      days.push({
-        date: d,
-        isCurrentMonth: false,
-        isToday: false,
-        dateStr: dStr,
-        todos: getTodosForDate(dStr),
-        isHoliday: !!holidayName,
-        holidayName,
-        isWeekend: isWeekend(d),
-      });
+      days.push(buildDay(d, false, false));
     }
 
     // Current month days
@@ -85,39 +113,28 @@ const Calendar: React.FC<CalendarProps> = ({
     for (let i = 1; i <= daysInMonth; i++) {
       const d = new Date(year, month, i);
       const dStr = formatLocalDate(d);
-      const holidayName = getHolidayName(d);
-      days.push({
-        date: d,
-        isCurrentMonth: true,
-        isToday: dStr === todayStr,
-        dateStr: dStr,
-        todos: getTodosForDate(dStr),
-        isHoliday: !!holidayName,
-        holidayName,
-        isWeekend: isWeekend(d),
-      });
+      days.push(buildDay(d, true, dStr === todayStr));
     }
 
     // Next month padding (to fill 6 rows * 7 cols = 42)
     const remainingSlots = 42 - days.length;
     for (let i = 1; i <= remainingSlots; i++) {
       const d = new Date(year, month + 1, i);
-      const dStr = formatLocalDate(d);
-      const holidayName = getHolidayName(d);
-      days.push({
-        date: d,
-        isCurrentMonth: false,
-        isToday: false,
-        dateStr: dStr,
-        todos: getTodosForDate(dStr),
-        isHoliday: !!holidayName,
-        holidayName,
-        isWeekend: isWeekend(d),
-      });
+      days.push(buildDay(d, false, false));
     }
 
     return days;
-  }, [currentDate, todos]);
+  }, [currentDate, todos, dateColors]);
+
+  const commitDateLabel = (dateStr: string) => {
+    if (!onSetDateLabel) {
+      setEditingDateStr(null);
+      return;
+    }
+    const trimmed = editingValue.trim();
+    onSetDateLabel(dateStr, trimmed || null);
+    setEditingDateStr(null);
+  };
 
   const isSelected = (d: Date) =>
     d.getDate() === selectedDate.getDate() &&
@@ -470,22 +487,32 @@ const Calendar: React.FC<CalendarProps> = ({
             ? "text-blue-700"
             : "text-slate-700";
 
+          const isEditingLabel = editingDateStr === day.dateStr;
+
           return (
-            <button
+            <div
               key={`${day.dateStr}-${idx}`}
+              role="button"
+              tabIndex={0}
               onClick={() => onSelectDate(day.date)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  onSelectDate(day.date);
+                }
+              }}
               className={`
-                relative flex flex-col items-start justify-start p-0.5 md:p-1 text-left transition-colors
+                relative flex flex-col items-start justify-start p-0.5 md:p-1 text-left transition-colors cursor-pointer
                 ${baseBgClass} ${textClass}
                 ${isDaySelected ? "ring-2 ring-pink-300" : "hover:bg-slate-50"}
               `}
               title={day.holidayName || undefined}
             >
               {/* Date Number */}
-              <div className="flex items-center gap-1 mb-0.5 md:mb-1">
+              <div className="flex items-center gap-1 mb-0.5 md:mb-1 w-full min-w-0">
                 <span
                   className={`
-                    text-[10px] md:text-xs font-medium w-5 h-5 md:w-6 md:h-6 flex items-center justify-center rounded-full
+                    text-[10px] md:text-xs font-medium w-5 h-5 md:w-6 md:h-6 flex items-center justify-center rounded-full shrink-0
                     ${
                       day.isToday
                         ? "bg-primary text-white shadow-md"
@@ -497,15 +524,48 @@ const Calendar: React.FC<CalendarProps> = ({
                 >
                   {day.date.getDate()}
                 </span>
-                {day.holidayName && (
-                  <span className="text-[8px] md:text-[9px] font-medium text-red-600 truncate max-w-[60px] md:max-w-[80px]">
-                    {day.holidayName}
-                  </span>
-                )}
-                {!day.holidayName && dateColor?.label && (
-                  <span className="text-[8px] md:text-[9px] font-medium text-slate-500 truncate max-w-[60px] md:max-w-[80px]">
-                    {dateColor.label}
-                  </span>
+                {isEditingLabel ? (
+                  <input
+                    ref={labelInputRef}
+                    type="text"
+                    value={editingValue}
+                    maxLength={16}
+                    onClick={(e) => e.stopPropagation()}
+                    onChange={(e) => setEditingValue(e.target.value)}
+                    onBlur={() => commitDateLabel(day.dateStr)}
+                    onKeyDown={(e) => {
+                      e.stopPropagation();
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        commitDateLabel(day.dateStr);
+                      }
+                      if (e.key === "Escape") {
+                        e.preventDefault();
+                        setEditingDateStr(null);
+                      }
+                    }}
+                    className={`min-w-0 flex-1 px-0.5 text-[8px] md:text-[9px] font-medium bg-white border border-pink-300 rounded outline-none ${
+                      day.isHoliday ? "text-red-600" : "text-slate-600"
+                    }`}
+                    aria-label="日付の名前を編集"
+                  />
+                ) : (
+                  day.holidayName && (
+                    <span
+                      className={`text-[8px] md:text-[9px] font-medium truncate max-w-[60px] md:max-w-[80px] ${
+                        day.isHoliday ? "text-red-600" : "text-slate-500"
+                      } ${onSetDateLabel ? "hover:underline" : ""}`}
+                      title={onSetDateLabel ? "クリックして名前を変更" : day.holidayName}
+                      onClick={(e) => {
+                        if (!onSetDateLabel) return;
+                        e.stopPropagation();
+                        setEditingDateStr(day.dateStr);
+                        setEditingValue(day.holidayName || "");
+                      }}
+                    >
+                      {day.holidayName}
+                    </span>
+                  )
                 )}
               </div>
 
@@ -559,7 +619,7 @@ const Calendar: React.FC<CalendarProps> = ({
                   </div>
                 )}
               </div>
-            </button>
+            </div>
           );
         })}
       </div>

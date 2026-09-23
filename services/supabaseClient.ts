@@ -1,4 +1,9 @@
 import { createClient } from "@supabase/supabase-js";
+import {
+  GOOGLE_OAUTH_HASH_KEY,
+  GOOGLE_OAUTH_STATE_KEY,
+  isTrustedGoogleOAuthHash,
+} from "../utils/googleOAuthHash";
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -10,22 +15,26 @@ if (!supabaseUrl || !supabaseAnonKey) {
 }
 
 // Google Calendar implicit OAuth also returns #access_token=.
-// Capture it before createClient so detectSessionInUrl cannot treat it as a login.
+// Capture it before createClient so it cannot be confused with a Supabase session.
+// Only a hash that echoes this tab's one-time state is kept.
+// https://developers.google.com/identity/protocols/oauth2/javascript-implicit-flow
 if (typeof window !== "undefined") {
-  const hash = window.location.hash;
-  if (
-    hash.includes("access_token=") &&
-    (hash.includes("state=gcal") || hash.includes("googleapis.com"))
-  ) {
-    sessionStorage.setItem(
-      "kizuna_google_oauth_hash",
-      hash.startsWith("#") ? hash.slice(1) : hash
-    );
-    history.replaceState(
-      null,
-      "",
-      window.location.pathname + window.location.search
-    );
+  try {
+    const hash = window.location.hash;
+    const expectedState = sessionStorage.getItem(GOOGLE_OAUTH_STATE_KEY);
+    if (isTrustedGoogleOAuthHash(hash, expectedState)) {
+      sessionStorage.setItem(
+        GOOGLE_OAUTH_HASH_KEY,
+        hash.startsWith("#") ? hash.slice(1) : hash
+      );
+      history.replaceState(
+        null,
+        "",
+        window.location.pathname + window.location.search
+      );
+    }
+  } catch {
+    /* sessionStorage unavailable; leave the hash for a later check */
   }
 }
 

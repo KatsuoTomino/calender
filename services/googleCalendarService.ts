@@ -12,6 +12,11 @@
 import { TodoItem } from "../types";
 import { logger } from "./logger";
 import { updateTodoGoogleMark } from "./todoService";
+import {
+  GOOGLE_OAUTH_HASH_KEY,
+  GOOGLE_OAUTH_STATE_KEY,
+  selectTrustedOAuthHash,
+} from "../utils/googleOAuthHash";
 
 const GIS_SCRIPT_SRC = "https://accounts.google.com/gsi/client";
 const CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar.events";
@@ -88,6 +93,14 @@ function takePendingAction(): PendingGoogleAction | null {
  * Read access_token from an OAuth implicit redirect hash.
  * Docs: https://developers.google.com/identity/protocols/oauth2/javascript-implicit-flow
  */
+function stripOAuthHashFromUrl() {
+  history.replaceState(
+    null,
+    "",
+    window.location.pathname + window.location.search
+  );
+}
+
 export function consumeGoogleOAuthRedirect(): {
   ok: boolean;
   error?: string;
@@ -96,26 +109,27 @@ export function consumeGoogleOAuthRedirect(): {
   const fromUrl = window.location.hash.startsWith("#")
     ? window.location.hash.slice(1)
     : "";
-  const stored = sessionStorage.getItem("kizuna_google_oauth_hash") || "";
-  const hash = fromUrl.includes("access_token=") || fromUrl.includes("error=")
-    ? fromUrl
-    : stored;
-  sessionStorage.removeItem("kizuna_google_oauth_hash");
+  const stored = sessionStorage.getItem(GOOGLE_OAUTH_HASH_KEY) || "";
+  const expectedState = sessionStorage.getItem(GOOGLE_OAUTH_STATE_KEY);
+  const hash = selectTrustedOAuthHash(fromUrl, stored, expectedState);
+  sessionStorage.removeItem(GOOGLE_OAUTH_HASH_KEY);
 
-  if (!hash.includes("access_token=") && !hash.includes("error=")) {
+  if (!hash) {
+    // Drop a token that was not issued for this tab. Do not cache it.
+    if (fromUrl.includes("access_token=") || fromUrl.includes("error=")) {
+      stripOAuthHashFromUrl();
+    }
     return { ok: false };
   }
+
+  sessionStorage.removeItem(GOOGLE_OAUTH_STATE_KEY);
 
   const params = new URLSearchParams(hash);
   const error = params.get("error");
   const token = params.get("access_token");
   const expiresIn = Number(params.get("expires_in") || "3600");
 
-  history.replaceState(
-    null,
-    "",
-    window.location.pathname + window.location.search
-  );
+  stripOAuthHashFromUrl();
 
   if (error) {
     if (
@@ -150,6 +164,8 @@ function startImplicitRedirect(forceConsent = false) {
   const clientId = getClientId();
   const useConsent =
     forceConsent || localStorage.getItem(CONNECTED_FLAG_KEY) !== "1";
+  const state = crypto.randomUUID();
+  sessionStorage.setItem(GOOGLE_OAUTH_STATE_KEY, state);
   const params = new URLSearchParams({
     client_id: clientId,
     redirect_uri: oauthRedirectUri(),
@@ -157,7 +173,7 @@ function startImplicitRedirect(forceConsent = false) {
     scope: CALENDAR_SCOPE,
     include_granted_scopes: "true",
     prompt: useConsent ? "consent" : "none",
-    state: "gcal",
+    state,
   });
   window.location.assign(
     `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`

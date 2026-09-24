@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { User, TodoItem, DateColor, DateColorType } from "./types";
+import { User, TodoItem, DateColor, DateColorType, Habit, HabitCompletion } from "./types";
 import { saveUser, getStoredUser } from "./services/storageService";
 import {
   fetchTodos,
@@ -18,6 +18,15 @@ import {
 } from "./services/authService";
 import { deleteImageFromR2, uploadAvatarToR2, getImageUrl, getAvatarFromR2 } from "./services/r2Service";
 import { fetchDateColors, setDateColor, setDateLabel, subscribeDateColorChanges } from "./services/dateColorService";
+import {
+  fetchHabits,
+  fetchHabitCompletions,
+  addHabit,
+  updateHabitText,
+  deleteHabit,
+  setHabitCompletion,
+  subscribeHabitChanges,
+} from "./services/habitService";
 import { logger } from "./services/logger";
 import {
   consumeGoogleOAuthRedirect,
@@ -27,6 +36,7 @@ import {
 import Login from "./components/Login";
 import Calendar from "./components/Calendar";
 import TodoList from "./components/TodoList";
+import HabitsList from "./components/HabitsList";
 
 const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
@@ -38,8 +48,11 @@ const App: React.FC = () => {
   const [showShoppingPanel, setShowShoppingPanel] = useState(false); // 買い物リストパネル
   const [showMonthTasksPanel, setShowMonthTasksPanel] = useState(false); // 月のタスクパネル（お金）
   const [showMonthSchedulePanel, setShowMonthSchedulePanel] = useState(false); // 表示月の日付タスク一覧
+  const [showHabitsPanel, setShowHabitsPanel] = useState(false);
   const [avatarImageUrl, setAvatarImageUrl] = useState<string | null>(null); // アバター画像の表示用URL
   const [dateColors, setDateColors] = useState<DateColor[]>([]);
+  const [habits, setHabits] = useState<Habit[]>([]);
+  const [habitCompletions, setHabitCompletions] = useState<HabitCompletion[]>([]);
   const [googleFlash, setGoogleFlash] = useState<string | null>(null);
   const googleResumeRef = useRef(false);
   const avatarFileInputRef = useRef<HTMLInputElement>(null);
@@ -76,6 +89,8 @@ const App: React.FC = () => {
         localStorage.removeItem("kizuna_user");
         setUser(null);
         setTodos([]);
+        setHabits([]);
+        setHabitCompletions([]);
         setAvatarImageUrl(null);
       }
     });
@@ -114,6 +129,7 @@ const App: React.FC = () => {
 
       // date colorsを読み込む
       loadDateColors();
+      loadHabits();
 
       // リアルタイム更新を購読
       const todoChannel = subscribeTodoChanges((updatedTodos) => {
@@ -122,10 +138,15 @@ const App: React.FC = () => {
       const dateColorChannel = subscribeDateColorChanges((updatedColors) => {
         setDateColors(updatedColors);
       });
+      const habitChannel = subscribeHabitChanges(({ habits: h, completions: c }) => {
+        setHabits(h);
+        setHabitCompletions(c);
+      });
 
       return () => {
         todoChannel.unsubscribe();
         dateColorChannel.unsubscribe();
+        habitChannel.unsubscribe();
       };
     }
   }, [user]);
@@ -262,6 +283,79 @@ const App: React.FC = () => {
     setDateColors(colors);
   };
 
+  const loadHabits = async () => {
+    const [h, c] = await Promise.all([
+      fetchHabits(),
+      fetchHabitCompletions(),
+    ]);
+    setHabits(h);
+    setHabitCompletions(c);
+  };
+
+  const handleAddHabit = async (text: string) => {
+    if (!user) return;
+    const now = new Date();
+    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+    const habit: Habit = {
+      id: crypto.randomUUID(),
+      text: text.trim(),
+      startDate: today,
+      createdBy: user.id,
+      sortOrder: habits.length,
+    };
+    setHabits((prev) => [...prev, habit]);
+    const success = await addHabit(habit);
+    if (!success) {
+      await loadHabits();
+    }
+  };
+
+  const handleUpdateHabit = async (id: string, text: string) => {
+    setHabits((prev) =>
+      prev.map((h) => (h.id === id ? { ...h, text } : h))
+    );
+    const success = await updateHabitText(id, text);
+    if (!success) {
+      await loadHabits();
+    }
+  };
+
+  const handleDeleteHabit = async (id: string) => {
+    setHabits((prev) => prev.filter((h) => h.id !== id));
+    setHabitCompletions((prev) => prev.filter((c) => c.habitId !== id));
+    const success = await deleteHabit(id);
+    if (!success) {
+      await loadHabits();
+    }
+  };
+
+  const handleToggleHabitCompletion = async (
+    habitId: string,
+    dateStr: string,
+    completed: boolean
+  ) => {
+    setHabitCompletions((prev) => {
+      const without = prev.filter(
+        (c) => !(c.habitId === habitId && c.dateStr === dateStr)
+      );
+      if (!completed) return without;
+      return [
+        ...without,
+        {
+          id: crypto.randomUUID(),
+          habitId,
+          dateStr,
+          completed: true,
+        },
+      ];
+    });
+
+    const success = await setHabitCompletion(habitId, dateStr, completed);
+    if (!success) {
+      await loadHabits();
+    }
+  };
+
   const handleSetDateColor = async (dateStr: string, color: DateColorType) => {
     if (!user) return;
 
@@ -317,6 +411,8 @@ const App: React.FC = () => {
   const handleLogout = async () => {
     setUser(null);
     setTodos([]);
+    setHabits([]);
+    setHabitCompletions([]);
     setAvatarImageUrl(null);
     localStorage.removeItem("kizuna_user");
     try {
@@ -618,6 +714,31 @@ const App: React.FC = () => {
                 </span>
               )}
             </button>
+            <button
+              onClick={() => setShowHabitsPanel(true)}
+              className="relative px-2 py-1 sm:px-3 sm:py-1.5 text-white bg-emerald-500 hover:bg-emerald-600 rounded-lg transition-colors shadow-sm flex items-center justify-center shrink-0 min-w-[32px] sm:min-w-[36px]"
+              title="毎日やるタスク"
+            >
+              <svg
+                className="w-4 h-4 sm:w-5 sm:h-5"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                />
+              </svg>
+              {habits.length > 0 && (
+                <span className="absolute -top-1 -right-1 bg-white/90 text-emerald-700 px-1 sm:px-1.5 py-0.5 rounded-full text-[9px] sm:text-[10px] font-bold min-w-[16px] text-center">
+                  {habits.length}
+                </span>
+              )}
+            </button>
           </div>
         </div>
         <button
@@ -646,6 +767,8 @@ const App: React.FC = () => {
             todos={todos}
             dateColors={dateColors}
             onSetDateLabel={handleSetDateLabel}
+            habits={habits}
+            habitCompletions={habitCompletions}
           />
         </div>
 
@@ -664,6 +787,9 @@ const App: React.FC = () => {
               dateColors={dateColors}
               onSetDateColor={handleSetDateColor}
               onSetDateLabel={handleSetDateLabel}
+              habits={habits}
+              habitCompletions={habitCompletions}
+              onToggleHabitCompletion={handleToggleHabitCompletion}
             />
         </div>
 
@@ -700,6 +826,9 @@ const App: React.FC = () => {
               dateColors={dateColors}
               onSetDateColor={handleSetDateColor}
               onSetDateLabel={handleSetDateLabel}
+              habits={habits}
+              habitCompletions={habitCompletions}
+              onToggleHabitCompletion={handleToggleHabitCompletion}
             />
           </div>
         </div>
@@ -791,6 +920,44 @@ const App: React.FC = () => {
               onGoogleMarkChange={handleGoogleMarkChange}
                 currentUser={user}
                 onClose={() => setShowShoppingPanel(false)}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* 毎日やるタスクパネル - Desktop */}
+        {showHabitsPanel && (
+          <div
+            className="hidden md:block fixed inset-0 z-40 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4"
+            onClick={() => setShowHabitsPanel(false)}
+          >
+            <div
+              className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl h-[80vh] flex flex-col overflow-hidden"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <HabitsList
+                habits={habits}
+                currentUser={user}
+                onAddHabit={handleAddHabit}
+                onUpdateHabit={handleUpdateHabit}
+                onDeleteHabit={handleDeleteHabit}
+                onClose={() => setShowHabitsPanel(false)}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* 毎日やるタスクパネル - Mobile */}
+        {showHabitsPanel && (
+          <div className="md:hidden fixed inset-0 z-40 bg-black/50 backdrop-blur-sm">
+            <div className="absolute inset-0 bg-white shadow-2xl flex flex-col overflow-hidden">
+              <HabitsList
+                habits={habits}
+                currentUser={user}
+                onAddHabit={handleAddHabit}
+                onUpdateHabit={handleUpdateHabit}
+                onDeleteHabit={handleDeleteHabit}
+                onClose={() => setShowHabitsPanel(false)}
               />
             </div>
           </div>

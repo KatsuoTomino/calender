@@ -1,7 +1,8 @@
 import React, { useMemo, useState, useRef, useEffect } from "react";
 import { WEEKDAYS } from "../constants";
-import { DayData, TodoItem, DateColor } from "../types";
+import { DayData, TodoItem, DateColor, Habit, HabitCompletion } from "../types";
 import { getHolidayName, isWeekend } from "../utils/holidays";
+import { habitCompletionPercent } from "../services/habitService";
 
 interface CalendarProps {
   currentDate: Date;
@@ -14,6 +15,8 @@ interface CalendarProps {
   todos: TodoItem[];
   dateColors?: DateColor[];
   onSetDateLabel?: (dateStr: string, label: string | null) => void;
+  habits?: Habit[];
+  habitCompletions?: HabitCompletion[];
 }
 
 const Calendar: React.FC<CalendarProps> = ({
@@ -27,6 +30,8 @@ const Calendar: React.FC<CalendarProps> = ({
   todos,
   dateColors = [],
   onSetDateLabel,
+  habits = [],
+  habitCompletions = [],
 }) => {
   const [showYearMonthPicker, setShowYearMonthPicker] = useState(false);
   const [tempSelectedYear, setTempSelectedYear] = useState<number | null>(null);
@@ -488,6 +493,11 @@ const Calendar: React.FC<CalendarProps> = ({
             : "text-slate-700";
 
           const isEditingLabel = editingDateStr === day.dateStr;
+          const habitPct = habitCompletionPercent(
+            habits,
+            habitCompletions,
+            day.dateStr
+          );
 
           return (
             <div
@@ -502,7 +512,7 @@ const Calendar: React.FC<CalendarProps> = ({
                 }
               }}
               className={`
-                relative flex flex-col items-start justify-start p-0.5 md:p-1 text-left transition-colors cursor-pointer
+                relative flex flex-col items-start justify-start p-0.5 md:p-1 text-left transition-colors cursor-pointer h-full min-h-0
                 ${baseBgClass} ${textClass}
                 ${isDaySelected ? "ring-2 ring-pink-300" : "hover:bg-slate-50"}
               `}
@@ -619,6 +629,22 @@ const Calendar: React.FC<CalendarProps> = ({
                   </div>
                 )}
               </div>
+
+              {/* Habit completion % (separate from todo bars) */}
+              {habitPct !== null && (
+                <div
+                  className={`mt-auto pt-0.5 w-full text-[8px] md:text-[9px] font-semibold tabular-nums ${
+                    habitPct >= 100
+                      ? "text-emerald-600"
+                      : habitPct >= 50
+                        ? "text-emerald-500/80"
+                        : "text-slate-400"
+                  }`}
+                  title={`毎日やるタスク ${habitPct}%`}
+                >
+                  {habitPct}%
+                </div>
+              )}
             </div>
           );
         })}

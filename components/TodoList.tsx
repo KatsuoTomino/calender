@@ -1,7 +1,8 @@
 import React, { useState, useRef, useEffect } from "react";
-import { TodoItem, User, DateColor, DateColorType } from "../types";
+import { TodoItem, User, DateColor, DateColorType, Habit, HabitCompletion } from "../types";
 import { generateId } from "../services/storageService";
 import { getHolidayName } from "../utils/holidays";
+import { habitsForDate } from "../services/habitService";
 import { uploadImageToR2, getImageUrl, deleteImageFromR2 } from "../services/r2Service";
 import { logger } from "../services/logger";
 import {
@@ -46,6 +47,14 @@ interface TodoListProps {
   hideAddForm?: boolean;
   /** Show each todo's dateStr in the list */
   showTodoDates?: boolean;
+  /** Daily habits (shown below todos on date detail) */
+  habits?: Habit[];
+  habitCompletions?: HabitCompletion[];
+  onToggleHabitCompletion?: (
+    habitId: string,
+    dateStr: string,
+    completed: boolean
+  ) => void;
 }
 
 // 確認モーダルの型
@@ -207,6 +216,9 @@ const TodoList: React.FC<TodoListProps> = ({
   googleImportMonth,
   hideAddForm = false,
   showTodoDates = false,
+  habits = [],
+  habitCompletions = [],
+  onToggleHabitCompletion,
 }) => {
   const [newTodoText, setNewTodoText] = useState("");
   const [isUploading, setIsUploading] = useState(false);
@@ -837,6 +849,18 @@ const TodoList: React.FC<TodoListProps> = ({
       null
     : null;
 
+  const dayHabits =
+    !dateStr && date && selectedDateStr
+      ? habitsForDate(habits, selectedDateStr)
+      : [];
+  const isHabitDone = (habitId: string) =>
+    habitCompletions.some(
+      (c) =>
+        c.habitId === habitId &&
+        c.dateStr === selectedDateStr &&
+        c.completed
+    );
+
   return (
     <div className="h-full flex flex-col bg-white md:rounded-3xl shadow-sm overflow-hidden">
       {/* Header */}
@@ -1030,7 +1054,7 @@ const TodoList: React.FC<TodoListProps> = ({
 
       {/* List */}
       <div className="flex-1 overflow-y-auto p-4 space-y-3 no-scrollbar">
-        {sortedTodos.length === 0 ? (
+        {sortedTodos.length === 0 && dayHabits.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center text-slate-300 opacity-60">
             <svg
               className="w-16 h-16 mb-4"
@@ -1286,6 +1310,91 @@ const TodoList: React.FC<TodoListProps> = ({
               </button>
             </div>
           ))
+        )}
+
+        {/* 毎日やるタスク（日付詳細のみ・追加日以降） */}
+        {dayHabits.length > 0 && onToggleHabitCompletion && (
+          <div className={`${sortedTodos.length > 0 ? "pt-4 mt-2 border-t border-slate-100" : ""}`}>
+            <h4 className="text-xs font-bold text-emerald-700 mb-3 flex items-center gap-1.5">
+              <svg
+                className="w-3.5 h-3.5"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+                aria-hidden="true"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                />
+              </svg>
+              毎日やるタスク
+              <span className="font-normal text-slate-400">
+                (
+                {dayHabits.filter((h) => isHabitDone(h.id)).length}/
+                {dayHabits.length})
+              </span>
+            </h4>
+            <div className="space-y-2">
+              {dayHabits.map((habit) => {
+                const done = isHabitDone(habit.id);
+                return (
+                  <div
+                    key={habit.id}
+                    className={`flex items-center gap-3 p-3 rounded-xl border transition-all ${
+                      done
+                        ? "bg-emerald-50/60 border-emerald-100 opacity-80"
+                        : "bg-white border-slate-100 shadow-sm"
+                    }`}
+                  >
+                    <button
+                      type="button"
+                      onClick={() =>
+                        onToggleHabitCompletion(
+                          habit.id,
+                          selectedDateStr,
+                          !done
+                        )
+                      }
+                      className={`flex-shrink-0 w-6 h-6 rounded-full border-2 flex items-center justify-center transition-colors ${
+                        done
+                          ? "bg-emerald-500 border-emerald-500"
+                          : "border-slate-300 hover:border-emerald-400"
+                      }`}
+                      aria-label={done ? "未実施にする" : "実施済みにする"}
+                    >
+                      {done && (
+                        <svg
+                          className="w-4 h-4 text-white"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={3}
+                            d="M5 13l4 4L19 7"
+                          />
+                        </svg>
+                      )}
+                    </button>
+                    <span
+                      className={`text-sm flex-1 min-w-0 ${
+                        done
+                          ? "line-through text-slate-400"
+                          : "text-slate-700"
+                      }`}
+                    >
+                      {linkifyText(habit.text)}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
         )}
       </div>
 

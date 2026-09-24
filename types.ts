@@ -42,6 +42,23 @@ export interface DateColor {
   createdBy: string;
 }
 
+/** Daily habit definition (shared). Shown on day detail from startDate onward. */
+export interface Habit {
+  id: string;
+  text: string;
+  startDate: string; // YYYY-MM-DD
+  createdBy: string;
+  sortOrder: number;
+}
+
+/** Per-day completion for a habit */
+export interface HabitCompletion {
+  id: string;
+  habitId: string;
+  dateStr: string; // YYYY-MM-DD
+  completed: boolean;
+}
+
 export enum GeminiAction {
   SUGGEST_TASKS = 'SUGGEST_TASKS',
   ENCOURAGE = 'ENCOURAGE'

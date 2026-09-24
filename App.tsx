@@ -21,6 +21,7 @@ import { fetchDateColors, setDateColor, setDateLabel, subscribeDateColorChanges 
 import {
   fetchHabits,
   fetchHabitCompletions,
+  tryFetchHabitCompletions,
   addHabit,
   updateHabitText,
   deleteHabit,
@@ -53,6 +54,10 @@ const App: React.FC = () => {
   const [dateColors, setDateColors] = useState<DateColor[]>([]);
   const [habits, setHabits] = useState<Habit[]>([]);
   const [habitCompletions, setHabitCompletions] = useState<HabitCompletion[]>([]);
+  // Bumped when a local completion edit starts or a completion reload starts.
+  // In-flight reloads captured an older generation and must not overwrite a newer edit.
+  const completionSyncGen = useRef(0);
+  const refreshHabitCompletionsRef = useRef<() => Promise<void>>(async () => {});
   const [googleFlash, setGoogleFlash] = useState<string | null>(null);
   const googleResumeRef = useRef(false);
   const avatarFileInputRef = useRef<HTMLInputElement>(null);
@@ -89,6 +94,7 @@ const App: React.FC = () => {
         localStorage.removeItem("kizuna_user");
         setUser(null);
         setTodos([]);
+        completionSyncGen.current += 1;
         setHabits([]);
         setHabitCompletions([]);
         setAvatarImageUrl(null);
@@ -138,9 +144,15 @@ const App: React.FC = () => {
       const dateColorChannel = subscribeDateColorChanges((updatedColors) => {
         setDateColors(updatedColors);
       });
-      const habitChannel = subscribeHabitChanges(({ habits: h, completions: c }) => {
-        setHabits(h);
-        setHabitCompletions(c);
+      const habitChannel = subscribeHabitChanges({
+        onHabits: () => {
+          void fetchHabits().then((next) => {
+            setHabits(next);
+          });
+        },
+        onCompletions: () => {
+          void refreshHabitCompletionsRef.current();
+        },
       });
 
       return () => {
@@ -284,13 +296,24 @@ const App: React.FC = () => {
   };
 
   const loadHabits = async () => {
+    const gen = completionSyncGen.current;
     const [h, c] = await Promise.all([
       fetchHabits(),
       fetchHabitCompletions(),
     ]);
     setHabits(h);
-    setHabitCompletions(c);
+    if (completionSyncGen.current === gen) {
+      setHabitCompletions(c);
+    }
   };
+
+  const refreshHabitCompletions = async () => {
+    const gen = ++completionSyncGen.current;
+    const rows = await tryFetchHabitCompletions();
+    if (completionSyncGen.current !== gen || rows === null) return;
+    setHabitCompletions(rows);
+  };
+  refreshHabitCompletionsRef.current = refreshHabitCompletions;
 
   const handleAddHabit = async (text: string) => {
     if (!user) return;
@@ -334,6 +357,7 @@ const App: React.FC = () => {
     dateStr: string,
     completed: boolean
   ) => {
+    completionSyncGen.current += 1;
     setHabitCompletions((prev) => {
       const without = prev.filter(
         (c) => !(c.habitId === habitId && c.dateStr === dateStr)
@@ -350,10 +374,10 @@ const App: React.FC = () => {
       ];
     });
 
-    const success = await setHabitCompletion(habitId, dateStr, completed);
-    if (!success) {
-      await loadHabits();
-    }
+    const result = await setHabitCompletion(habitId, dateStr, completed);
+    // A newer toggle owns the reload. Refreshing here would restore the stale check.
+    if (result === "superseded") return;
+    await refreshHabitCompletions();
   };
 
   const handleSetDateColor = async (dateStr: string, color: DateColorType) => {
@@ -409,6 +433,7 @@ const App: React.FC = () => {
   };
 
   const handleLogout = async () => {
+    completionSyncGen.current += 1;
     setUser(null);
     setTodos([]);
     setHabits([]);

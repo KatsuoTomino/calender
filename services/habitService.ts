@@ -1,6 +1,10 @@
 import { supabase } from "./supabaseClient";
 import { Habit, HabitCompletion } from "../types";
 import { logger } from "./logger";
+import {
+  createLatestWriteQueue,
+  type LatestWriteResult,
+} from "../utils/latestWriteQueue";
 
 function mapHabit(row: {
   id: string;
@@ -52,20 +56,25 @@ export async function fetchHabits(): Promise<Habit[]> {
   }
 }
 
-export async function fetchHabitCompletions(): Promise<HabitCompletion[]> {
+/** null は取得失敗。空配列は「完了記録が無い」であり、失敗と区別する。 */
+export async function tryFetchHabitCompletions(): Promise<HabitCompletion[] | null> {
   try {
     const { data, error } = await supabase.from("habit_completions").select("*");
 
     if (error) {
       logger.error("習慣完了の取得エラー:", error);
-      return [];
+      return null;
     }
 
     return (data || []).map(mapCompletion);
   } catch (err) {
     logger.error("予期しないエラー:", err);
-    return [];
+    return null;
   }
+}
+
+export async function fetchHabitCompletions(): Promise<HabitCompletion[]> {
+  return (await tryFetchHabitCompletions()) ?? [];
 }
 
 export async function addHabit(habit: Habit): Promise<boolean> {
@@ -129,8 +138,10 @@ export async function deleteHabit(id: string): Promise<boolean> {
 /**
  * Check on: upsert completed=true.
  * Check off: delete the row (no completion record = not done).
+ * Check and uncheck are different requests, so a fast undo must not let the
+ * earlier insert land after the delete and resurrect the check.
  */
-export async function setHabitCompletion(
+async function writeHabitCompletion(
   habitId: string,
   dateStr: string,
   completed: boolean
@@ -171,34 +182,43 @@ export async function setHabitCompletion(
   }
 }
 
-export function subscribeHabitChanges(
-  callback: (payload: {
-    habits: Habit[];
-    completions: HabitCompletion[];
-  }) => void
-) {
-  const refresh = async () => {
-    const [habits, completions] = await Promise.all([
-      fetchHabits(),
-      fetchHabitCompletions(),
-    ]);
-    callback({ habits, completions });
-  };
+const enqueueHabitCompletion = createLatestWriteQueue<boolean>(
+  async (key, completed) => {
+    const splitAt = key.indexOf("\0");
+    return writeHabitCompletion(
+      key.slice(0, splitAt),
+      key.slice(splitAt + 1),
+      completed
+    );
+  }
+);
 
+export async function setHabitCompletion(
+  habitId: string,
+  dateStr: string,
+  completed: boolean
+): Promise<LatestWriteResult> {
+  return enqueueHabitCompletion(`${habitId}\0${dateStr}`, completed);
+}
+
+export function subscribeHabitChanges(handlers: {
+  onHabits: () => void;
+  onCompletions: () => void;
+}) {
   const channel = supabase
     .channel("habits-changes")
     .on(
       "postgres_changes",
       { event: "*", schema: "public", table: "habits" },
       () => {
-        void refresh();
+        handlers.onHabits();
       }
     )
     .on(
       "postgres_changes",
       { event: "*", schema: "public", table: "habit_completions" },
       () => {
-        void refresh();
+        handlers.onCompletions();
       }
     )
     .subscribe();

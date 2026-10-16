@@ -37,6 +37,7 @@ import Login from "./components/Login";
 import Calendar from "./components/Calendar";
 import TodoList from "./components/TodoList";
 import HabitsList from "./components/HabitsList";
+import { calendarMonthDate, shiftCalendarMonth } from "./utils/calendarMonth";
 
 const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
@@ -426,16 +427,11 @@ const App: React.FC = () => {
   };
 
   const handleMonthChange = (offset: number) => {
-    const newDate = new Date(currentDate);
-    newDate.setMonth(newDate.getMonth() + offset);
-    setCurrentDate(newDate);
+    setCurrentDate(shiftCalendarMonth(currentDate, offset));
   };
 
   const handleDateChange = (year: number, month: number) => {
-    const newDate = new Date(currentDate);
-    newDate.setFullYear(year);
-    newDate.setMonth(month);
-    setCurrentDate(newDate);
+    setCurrentDate(calendarMonthDate(year, month));
   };
 
   const handleDateSelect = (date: Date) => {

@@ -18,7 +18,9 @@
 ### 3. 認証とセキュリティ設定
 - ✅ Supabase Authによる認証が実装されている
 - ✅ Row Level Security (RLS)が有効
-- ✅ 環境変数は`VITE_`プレフィックスで適切に管理されている
+- ✅ R2の秘密情報はサーバー専用の`R2_*`環境変数で管理されている
+
+> **重要:** `VITE_`プレフィックスはブラウザから参照してよい値だけに使用します。R2のAccess Key ID、Secret Access Key、Endpoint、Bucket Nameには使用しません。Viteは`VITE_*`をクライアントバンドルへ公開します。
 
 ## ⚠️ 軽微な懸念事項
 
@@ -79,7 +81,10 @@ GitHub Actionsを使用する場合、Secretsで環境変数を管理：
 - `ADMIN_PASSWORD`
 - `VITE_SUPABASE_URL`
 - `VITE_SUPABASE_ANON_KEY`
-- `VITE_R2_*`（すべてのR2関連環境変数）
+- `R2_ENDPOINT`
+- `R2_ACCESS_KEY_ID`
+- `R2_SECRET_ACCESS_KEY`
+- `R2_BUCKET_NAME`
 
 ## ✅ 結論
 

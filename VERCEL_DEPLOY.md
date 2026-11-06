@@ -7,6 +7,7 @@
 - ✅ Vercel アカウント（無料で作成可能）
 - ✅ GitHub リポジトリ（既に準備済み）
 - ✅ Supabase 環境変数（URL、Anon Key）
+- ✅ Cloudflare R2 バケットと S3 API トークン
 
 ### 2. 環境変数の確認
 
@@ -15,7 +16,13 @@
 ```
 VITE_SUPABASE_URL=your_supabase_project_url
 VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
+R2_ENDPOINT=https://your_account_id.r2.cloudflarestorage.com
+R2_ACCESS_KEY_ID=your_r2_access_key_id
+R2_SECRET_ACCESS_KEY=your_r2_secret_access_key
+R2_BUCKET_NAME=your_r2_bucket_name
 ```
+
+`R2_*` は Vercel Function だけが使用する秘密情報です。`VITE_R2_*` に変更しないでください。Vite では `VITE_` で始まる値がクライアントのバンドルに公開されます。
 
 ---
 
@@ -53,13 +60,46 @@ VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
 | ------------------------ | ---------------------------------- |
 | `VITE_SUPABASE_URL`      | あなたの Supabase プロジェクト URL |
 | `VITE_SUPABASE_ANON_KEY` | あなたの Supabase Anon Key         |
+| `R2_ENDPOINT`            | `https://<ACCOUNT_ID>.r2.cloudflarestorage.com` |
+| `R2_ACCESS_KEY_ID`       | R2 S3 API の Access Key ID         |
+| `R2_SECRET_ACCESS_KEY`   | R2 S3 API の Secret Access Key     |
+| `R2_BUCKET_NAME`         | 画像を保存する R2 バケット名       |
 
 **追加方法：**
 
 1. **Key**欄に`VITE_SUPABASE_URL`を入力
 2. **Value**欄に Supabase URL を貼り付け
 3. **Add**をクリック
-4. 同様に`VITE_SUPABASE_ANON_KEY`を追加
+4. 同様に残りの 5 変数を追加
+5. Production と Preview の両方を対象にして保存
+
+環境変数を変更した場合は、新しいデプロイにだけ反映されるため再デプロイしてください。
+
+#### Cloudflare R2 CORS Policy（必須）
+
+このアプリは 3 MB を超える画像を、署名付き URL でブラウザから R2 へ直接 `PUT` します。Cloudflare の公式手順に従い、R2 ダッシュボードの **Bucket → Settings → CORS Policy** に次のポリシーを設定してください。
+
+```json
+[
+  {
+    "AllowedOrigins": [
+      "https://your-project-name.vercel.app",
+      "http://localhost:5173"
+    ],
+    "AllowedMethods": ["PUT"],
+    "AllowedHeaders": ["Content-Type"],
+    "ExposeHeaders": ["ETag"],
+    "MaxAgeSeconds": 3600
+  }
+]
+```
+
+`AllowedOrigins` は実際のオリジンと完全一致させます（末尾の `/` やパスは含めません）。カスタムドメインや個別の Preview URL からアップロードする場合は、そのオリジンも追加してください。
+
+参照:
+- [Cloudflare R2: Configure CORS](https://developers.cloudflare.com/r2/buckets/cors/)
+- [Cloudflare R2: AWS SDK JavaScript v3 / presigned URL](https://developers.cloudflare.com/r2/examples/aws/aws-sdk-js-v3/)
+- [Vite: Env Variables and Modes](https://vite.dev/guide/env-and-mode.html)
 
 ### ステップ 4: デプロイ実行
 
@@ -122,9 +162,18 @@ Supabase ダッシュボードで以下を確認：
 
 1. Vercel ダッシュボード → プロジェクトを選択
 2. **Settings** → **Environment Variables**
-3. 変数名が`VITE_`で始まっているか確認
+3. Supabase の公開設定は `VITE_SUPABASE_*`、R2 の秘密情報は `R2_*` であることを確認
 4. 値が正しく設定されているか確認
 5. 再デプロイ（**Deployments** → 最新デプロイの右側メニュー → **Redeploy**）
+
+### エラー: 画像をアップロード・表示できない
+
+**確認事項**:
+
+1. Vercel に `R2_ENDPOINT`、`R2_ACCESS_KEY_ID`、`R2_SECRET_ACCESS_KEY`、`R2_BUCKET_NAME` が設定されている
+2. `R2_ENDPOINT` が `https://<ACCOUNT_ID>.r2.cloudflarestorage.com` 形式である
+3. 3 MB を超える画像の場合、R2 の CORS Policy にアクセス元オリジン、`PUT`、`Content-Type` が設定されている
+4. 設定後に Vercel を再デプロイしている
 
 ### ビルドエラー
 
@@ -185,6 +234,7 @@ Vercel ダッシュボードで以下を確認：
 デプロイ前の最終確認：
 
 - [ ] 環境変数が正しく設定されている
+- [ ] R2 CORS Policy に本番オリジンからの `PUT` が設定されている
 - [ ] `.env.local`が Git にコミットされていない（`.gitignore`で除外済み）
 - [ ] Supabase の認証 URL が設定されている
 - [ ] RLS ポリシーが有効になっている

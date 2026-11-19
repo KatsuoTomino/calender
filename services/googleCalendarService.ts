@@ -10,6 +10,11 @@
  */
 
 import { TodoItem } from "../types";
+import {
+  GOOGLE_PENDING_ACTION_KEY,
+  discardInPageGooglePendingAction,
+  popupFailureShouldLeavePage,
+} from "./googleOAuthPending";
 import { logger } from "./logger";
 import { updateTodoGoogleMark } from "./todoService";
 
@@ -18,7 +23,7 @@ const CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar.events";
 const EXPORT_STORAGE_KEY = "kizuna_google_calendar_exports";
 const CONNECTED_FLAG_KEY = "kizuna_google_calendar_connected";
 const TOKEN_CACHE_KEY = "kizuna_google_access_token";
-const PENDING_AUTH_KEY = "kizuna_google_pending_action";
+const PENDING_AUTH_KEY = GOOGLE_PENDING_ACTION_KEY;
 const LOCAL_MARK_EVENT_ID = "local-mark";
 /** Prefix when user unchecked Gカレ but we still keep the real event id. */
 const SKIP_PREFIX = "skip:";
@@ -345,6 +350,8 @@ function requestAccessToken(options: { forceConsent?: boolean } = {}): Promise<s
   if (!options.forceConsent) {
     const cached = getCachedToken();
     if (cached) {
+      // Stay on this page. A stash from an earlier export must not replay.
+      discardInPageGooglePendingAction(sessionStorage);
       return Promise.resolve(cached);
     }
   } else {
@@ -390,6 +397,9 @@ function requestAccessToken(options: { forceConsent?: boolean } = {}): Promise<s
           return;
         }
         settled = true;
+        // Token is in hand and the page is not navigating. Drop the redirect
+        // stash before any later popup_closed can replay the export.
+        discardInPageGooglePendingAction(sessionStorage);
         localStorage.setItem(CONNECTED_FLAG_KEY, "1");
         sessionStorage.removeItem("kizuna_google_force_consent");
         saveCachedToken(
@@ -429,16 +439,16 @@ function requestAccessToken(options: { forceConsent?: boolean } = {}): Promise<s
           finishOk(response);
         },
         error_callback: (error) => {
-          if (
-            error.type === "popup_failed_to_open" ||
-            error.type === "popup_closed"
-          ) {
+          // Docs: https://developers.google.com/identity/oauth2/web/guides/error
+          // popup_closed is only for "closed before an OAuth response".
+          if (popupFailureShouldLeavePage(error.type, settled)) {
             if (!sessionStorage.getItem(PENDING_AUTH_KEY)) {
               stashPendingAction({ type: "auth-only" });
             }
             startImplicitRedirect(true);
             return;
           }
+          if (settled) return;
           if (!triedConsent) {
             triedConsent = true;
             clearGoogleAuthState();

@@ -247,6 +247,7 @@ const TodoList: React.FC<TodoListProps> = ({
     type: "success",
   });
   const [isDeleting, setIsDeleting] = useState(false);
+  const [showDayHabits, setShowDayHabits] = useState(false);
   const [isExportingToGoogle, setIsExportingToGoogle] = useState(false);
   const [isImportingFromGoogle, setIsImportingFromGoogle] = useState(false);
   const [importPreview, setImportPreview] = useState<{
@@ -307,12 +308,16 @@ const TodoList: React.FC<TodoListProps> = ({
   };
 
   useEffect(() => {
-    if (hideAddForm) return;
+    setShowDayHabits(false);
+  }, [date]);
+
+  useEffect(() => {
+    if (hideAddForm || showDayHabits) return;
     // Mobile: don't autofocus — the keyboard covers the day's schedule.
     const isMobile = window.matchMedia("(max-width: 767px)").matches;
     if (isMobile) return;
     inputRef.current?.focus();
-  }, [date, hideAddForm]);
+  }, [date, hideAddForm, showDayHabits]);
 
   // ESCキーでモーダルを閉じる
   useEffect(() => {
@@ -981,6 +986,49 @@ const TodoList: React.FC<TodoListProps> = ({
                 </svg>
               </button>
             )}
+            {/* 日詳細: 毎日やるタスクはボタンで開く（予定と混ぜない） */}
+            {!dateStr && date && onToggleHabitCompletion && (
+              <button
+                type="button"
+                onClick={() => setShowDayHabits((open) => !open)}
+                className={`relative inline-flex items-center gap-1 px-2 py-1.5 rounded-lg text-[11px] sm:text-xs font-medium transition-all touch-manipulation ${
+                  showDayHabits
+                    ? "text-white bg-emerald-500 hover:bg-emerald-600"
+                    : "text-emerald-700 bg-emerald-50 border border-emerald-200 hover:bg-emerald-100"
+                }`}
+                title="毎日やるタスク"
+                aria-label="毎日やるタスク"
+                aria-pressed={showDayHabits}
+              >
+                <svg
+                  className="w-3.5 h-3.5 shrink-0"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                  aria-hidden="true"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                  />
+                </svg>
+                <span className="whitespace-nowrap">毎日</span>
+                {dayHabits.length > 0 && (
+                  <span
+                    className={`ml-0.5 min-w-[16px] px-1 rounded-full text-[9px] font-bold text-center ${
+                      showDayHabits
+                        ? "bg-white/90 text-emerald-700"
+                        : "bg-emerald-500 text-white"
+                    }`}
+                  >
+                    {dayHabits.filter((h) => isHabitDone(h.id)).length}/
+                    {dayHabits.length}
+                  </span>
+                )}
+              </button>
+            )}
             {/* 日付ベースのタスクはモバイルのみ×ボタンを表示 */}
             {!dateStr && !showGoogleExport && (
               <button
@@ -1032,7 +1080,7 @@ const TodoList: React.FC<TodoListProps> = ({
       </div>
 
       {/* Input Area */}
-      {!hideAddForm && (
+      {!hideAddForm && !showDayHabits && (
       <div className="p-4 bg-white border-b border-slate-100 shrink-0">
         <form onSubmit={handleAdd} className="relative">
           <input
@@ -1057,7 +1105,76 @@ const TodoList: React.FC<TodoListProps> = ({
 
       {/* List */}
       <div className="flex-1 overflow-y-auto p-4 space-y-3 no-scrollbar">
-        {sortedTodos.length === 0 && dayHabits.length === 0 ? (
+        {showDayHabits && onToggleHabitCompletion ? (
+          dayHabits.length === 0 ? (
+            <div className="h-full flex flex-col items-center justify-center text-slate-300 opacity-60">
+              <p>この日の毎日やるタスクはありません</p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <h4 className="text-xs font-bold text-emerald-700 mb-1">
+                毎日やるタスク（
+                {dayHabits.filter((h) => isHabitDone(h.id)).length}/
+                {dayHabits.length}）
+              </h4>
+              {dayHabits.map((habit) => {
+                const done = isHabitDone(habit.id);
+                return (
+                  <div
+                    key={habit.id}
+                    className={`flex items-center gap-3 p-3 rounded-xl border transition-all ${
+                      done
+                        ? "bg-emerald-50/60 border-emerald-100 opacity-80"
+                        : "bg-white border-slate-100 shadow-sm"
+                    }`}
+                  >
+                    <button
+                      type="button"
+                      onClick={() =>
+                        onToggleHabitCompletion(
+                          habit.id,
+                          selectedDateStr,
+                          !done
+                        )
+                      }
+                      className={`flex-shrink-0 w-6 h-6 rounded-full border-2 flex items-center justify-center transition-colors ${
+                        done
+                          ? "bg-emerald-500 border-emerald-500"
+                          : "border-slate-300 hover:border-emerald-400"
+                      }`}
+                      aria-label={done ? "未実施にする" : "実施済みにする"}
+                    >
+                      {done && (
+                        <svg
+                          className="w-4 h-4 text-white"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={3}
+                            d="M5 13l4 4L19 7"
+                          />
+                        </svg>
+                      )}
+                    </button>
+                    <span
+                      className={`text-sm flex-1 min-w-0 ${
+                        done
+                          ? "line-through text-slate-400"
+                          : "text-slate-700"
+                      }`}
+                    >
+                      {linkifyText(habit.text)}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          )
+        ) : sortedTodos.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center text-slate-300 opacity-60">
             <svg
               className="w-16 h-16 mb-4"
@@ -1313,91 +1430,6 @@ const TodoList: React.FC<TodoListProps> = ({
               </button>
             </div>
           ))
-        )}
-
-        {/* 毎日やるタスク（日付詳細のみ・追加日以降） */}
-        {dayHabits.length > 0 && onToggleHabitCompletion && (
-          <div className={`${sortedTodos.length > 0 ? "pt-4 mt-2 border-t border-slate-100" : ""}`}>
-            <h4 className="text-xs font-bold text-emerald-700 mb-3 flex items-center gap-1.5">
-              <svg
-                className="w-3.5 h-3.5"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-                aria-hidden="true"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-                />
-              </svg>
-              毎日やるタスク
-              <span className="font-normal text-slate-400">
-                (
-                {dayHabits.filter((h) => isHabitDone(h.id)).length}/
-                {dayHabits.length})
-              </span>
-            </h4>
-            <div className="space-y-2">
-              {dayHabits.map((habit) => {
-                const done = isHabitDone(habit.id);
-                return (
-                  <div
-                    key={habit.id}
-                    className={`flex items-center gap-3 p-3 rounded-xl border transition-all ${
-                      done
-                        ? "bg-emerald-50/60 border-emerald-100 opacity-80"
-                        : "bg-white border-slate-100 shadow-sm"
-                    }`}
-                  >
-                    <button
-                      type="button"
-                      onClick={() =>
-                        onToggleHabitCompletion(
-                          habit.id,
-                          selectedDateStr,
-                          !done
-                        )
-                      }
-                      className={`flex-shrink-0 w-6 h-6 rounded-full border-2 flex items-center justify-center transition-colors ${
-                        done
-                          ? "bg-emerald-500 border-emerald-500"
-                          : "border-slate-300 hover:border-emerald-400"
-                      }`}
-                      aria-label={done ? "未実施にする" : "実施済みにする"}
-                    >
-                      {done && (
-                        <svg
-                          className="w-4 h-4 text-white"
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={3}
-                            d="M5 13l4 4L19 7"
-                          />
-                        </svg>
-                      )}
-                    </button>
-                    <span
-                      className={`text-sm flex-1 min-w-0 ${
-                        done
-                          ? "line-through text-slate-400"
-                          : "text-slate-700"
-                      }`}
-                    >
-                      {linkifyText(habit.text)}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
         )}
       </div>
 

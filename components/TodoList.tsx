@@ -308,7 +308,10 @@ const TodoList: React.FC<TodoListProps> = ({
 
   useEffect(() => {
     if (hideAddForm) return;
-    if (inputRef.current) inputRef.current.focus();
+    // Mobile: don't autofocus — the keyboard covers the day's schedule.
+    const isMobile = window.matchMedia("(max-width: 767px)").matches;
+    if (isMobile) return;
+    inputRef.current?.focus();
   }, [date, hideAddForm]);
 
   // ESCキーでモーダルを閉じる

@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
+import { GOOGLE_PENDING_ACTION_KEY } from "./googleOAuthPending";
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -18,7 +19,7 @@ if (typeof window !== "undefined") {
     (hash.includes("state=gcal") ||
       hash.includes("googleapis.com") ||
       hash.includes("calendar") ||
-      sessionStorage.getItem("kizuna_google_pending_action"));
+      sessionStorage.getItem(GOOGLE_PENDING_ACTION_KEY));
   if (looksLikeGoogleCalendarOAuth) {
     sessionStorage.setItem(
       "kizuna_google_oauth_hash",

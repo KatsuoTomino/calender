@@ -157,11 +157,22 @@ const App: React.FC = () => {
     googleResumeRef.current = true;
 
     const redirected = consumeGoogleOAuthRedirect();
-    if (redirected.error && redirected.error !== "interaction_required") {
+    const softAuthErrors = new Set([
+      "interaction_required",
+      "login_required",
+      "consent_required",
+    ]);
+    if (redirected.error && softAuthErrors.has(redirected.error)) {
+      // consumeGoogleOAuthRedirect may start a consent redirect; wait for it.
+      return;
+    }
+    if (redirected.error) {
       setGoogleFlash(
         redirected.error === "redirect_uri_mismatch"
           ? "Google Cloud の「承認済みのリダイレクト URI」にこのサイトのURLを追加してください"
-          : "Google認証がキャンセルされたか、失敗しました"
+          : redirected.error === "access_denied"
+            ? "Googleカレンダーへのアクセスが拒否されました。許可してもう一度お試しください"
+            : "Google認証がキャンセルされたか、失敗しました"
       );
       return;
     }

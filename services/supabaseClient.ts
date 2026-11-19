@@ -13,10 +13,13 @@ if (!supabaseUrl || !supabaseAnonKey) {
 // Capture it before createClient so detectSessionInUrl cannot treat it as a login.
 if (typeof window !== "undefined") {
   const hash = window.location.hash;
-  if (
-    hash.includes("access_token=") &&
-    (hash.includes("state=gcal") || hash.includes("googleapis.com"))
-  ) {
+  const looksLikeGoogleCalendarOAuth =
+    (hash.includes("access_token=") || hash.includes("error=")) &&
+    (hash.includes("state=gcal") ||
+      hash.includes("googleapis.com") ||
+      hash.includes("calendar") ||
+      sessionStorage.getItem("kizuna_google_pending_action"));
+  if (looksLikeGoogleCalendarOAuth) {
     sessionStorage.setItem(
       "kizuna_google_oauth_hash",
       hash.startsWith("#") ? hash.slice(1) : hash

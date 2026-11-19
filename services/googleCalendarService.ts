@@ -68,6 +68,35 @@ function saveCachedToken(token: string, expiresInSec: number) {
   );
 }
 
+function clearCachedToken() {
+  sessionStorage.removeItem(TOKEN_CACHE_KEY);
+}
+
+function clearGoogleAuthState() {
+  clearCachedToken();
+  localStorage.removeItem(CONNECTED_FLAG_KEY);
+  sessionStorage.removeItem("kizuna_google_force_consent");
+}
+
+function scopeGranted(tokenResponse: TokenResponse, scope: string): boolean {
+  if (window.google?.accounts?.oauth2?.hasGrantedAllScopes) {
+    try {
+      if (
+        window.google.accounts.oauth2.hasGrantedAllScopes(tokenResponse, scope)
+      ) {
+        return true;
+      }
+    } catch {
+      /* fall through to string check */
+    }
+  }
+  if (typeof tokenResponse.scope === "string" && tokenResponse.scope.length > 0) {
+    return tokenResponse.scope.split(/\s+/).includes(scope);
+  }
+  // Older GIS responses may omit scope; treat as granted if token exists.
+  return Boolean(tokenResponse.access_token);
+}
+
 function stashPendingAction(action: PendingGoogleAction) {
   sessionStorage.setItem(PENDING_AUTH_KEY, JSON.stringify(action));
 }
@@ -135,6 +164,7 @@ export function consumeGoogleOAuthRedirect(): {
 
   saveCachedToken(token, expiresIn);
   localStorage.setItem(CONNECTED_FLAG_KEY, "1");
+  sessionStorage.removeItem("kizuna_google_force_consent");
   return { ok: true };
 }
 
@@ -181,6 +211,8 @@ type TokenClient = {
 
 type TokenResponse = {
   access_token?: string;
+  expires_in?: number | string;
+  scope?: string;
   error?: string;
   error_description?: string;
 };
@@ -289,7 +321,7 @@ function loadGisScript(): Promise<void> {
   });
 }
 
-function requestAccessToken(): Promise<string> {
+function requestAccessToken(options: { forceConsent?: boolean } = {}): Promise<string> {
   const clientId = getClientId();
   if (!clientId) {
     return Promise.reject(
@@ -300,16 +332,25 @@ function requestAccessToken(): Promise<string> {
   }
 
   consumeGoogleOAuthRedirect();
-  const cached = getCachedToken();
-  if (cached) {
-    return Promise.resolve(cached);
+  if (!options.forceConsent) {
+    const cached = getCachedToken();
+    if (cached) {
+      return Promise.resolve(cached);
+    }
+  } else {
+    clearCachedToken();
   }
 
   // iOS/Android: GIS popup often cannot return the token to the app.
   // Use same-window implicit redirect instead.
   // Docs: https://developers.google.com/identity/protocols/oauth2/javascript-implicit-flow
   if (prefersRedirectAuth()) {
-    startImplicitRedirect();
+    if (!sessionStorage.getItem(PENDING_AUTH_KEY)) {
+      stashPendingAction({ type: "auth-only" });
+    }
+    startImplicitRedirect(
+      options.forceConsent || localStorage.getItem(CONNECTED_FLAG_KEY) !== "1"
+    );
     return new Promise(() => {
       /* page navigates away */
     });
@@ -323,36 +364,58 @@ function requestAccessToken(): Promise<string> {
         return;
       }
 
+      let triedConsent = Boolean(options.forceConsent);
+      let settled = false;
+
+      const finishOk = (response: TokenResponse) => {
+        if (settled || !response.access_token) return;
+        if (!scopeGranted(response, CALENDAR_SCOPE)) {
+          clearGoogleAuthState();
+          settled = true;
+          reject(
+            new Error(
+              "Googleカレンダーへの予定追加権限が許可されていません。もう一度許可してください。"
+            )
+          );
+          return;
+        }
+        settled = true;
+        localStorage.setItem(CONNECTED_FLAG_KEY, "1");
+        sessionStorage.removeItem("kizuna_google_force_consent");
+        saveCachedToken(
+          response.access_token,
+          Number(response.expires_in || 3600)
+        );
+        resolve(response.access_token);
+      };
+
       const tokenClient = window.google.accounts.oauth2.initTokenClient({
         client_id: clientId,
         scope: CALENDAR_SCOPE,
         callback: (response) => {
           if (response.error || !response.access_token) {
-            reject(
-              new Error(
-                response.error_description ||
-                  response.error ||
-                  "Google認証に失敗しました"
-              )
-            );
+            // Silent re-auth often fails after cookie / consent changes.
+            // Retry once with an explicit consent prompt.
+            if (!triedConsent) {
+              triedConsent = true;
+              clearGoogleAuthState();
+              tokenClient.requestAccessToken({ prompt: "consent" });
+              return;
+            }
+            clearGoogleAuthState();
+            if (!settled) {
+              settled = true;
+              reject(
+                new Error(
+                  response.error_description ||
+                    response.error ||
+                    "Google認証に失敗しました"
+                )
+              );
+            }
             return;
           }
-          if (
-            !window.google!.accounts.oauth2.hasGrantedAllScopes(
-              response,
-              CALENDAR_SCOPE
-            )
-          ) {
-            reject(
-              new Error(
-                "Googleカレンダーへの予定追加権限が許可されていません"
-              )
-            );
-            return;
-          }
-          localStorage.setItem(CONNECTED_FLAG_KEY, "1");
-          saveCachedToken(response.access_token, 3600);
-          resolve(response.access_token);
+          finishOk(response);
         },
         error_callback: (error) => {
           if (
@@ -365,15 +428,26 @@ function requestAccessToken(): Promise<string> {
             startImplicitRedirect(true);
             return;
           }
-          reject(
-            new Error(error.message || error.type || "Google認証がキャンセルされました")
-          );
+          if (!triedConsent) {
+            triedConsent = true;
+            clearGoogleAuthState();
+            tokenClient.requestAccessToken({ prompt: "consent" });
+            return;
+          }
+          if (!settled) {
+            settled = true;
+            reject(
+              new Error(
+                error.message || error.type || "Google認証がキャンセルされました"
+              )
+            );
+          }
         },
       });
 
       const alreadyConnected = localStorage.getItem(CONNECTED_FLAG_KEY) === "1";
       tokenClient.requestAccessToken({
-        prompt: alreadyConnected ? "" : "consent",
+        prompt: options.forceConsent || !alreadyConnected ? "consent" : "",
       });
     } catch (error) {
       reject(error instanceof Error ? error : new Error(String(error)));
@@ -381,26 +455,35 @@ function requestAccessToken(): Promise<string> {
   });
 }
 
-async function deleteCalendarEvent(
-  accessToken: string,
-  eventId: string
-): Promise<boolean> {
-  const res = await fetch(
+/** Fetch Calendar API; on 401 clear token and re-auth once. */
+async function calendarFetch(
+  input: string,
+  init: RequestInit
+): Promise<Response> {
+  const withAuth = async (token: string) => {
+    const headers = new Headers(init.headers || {});
+    headers.set("Authorization", `Bearer ${token}`);
+    return fetch(input, { ...init, headers });
+  };
+
+  let token = await requestAccessToken();
+  let res = await withAuth(token);
+  if (res.status !== 401) return res;
+
+  clearGoogleAuthState();
+  token = await requestAccessToken({ forceConsent: true });
+  return withAuth(token);
+}
+
+async function deleteCalendarEvent(eventId: string): Promise<boolean> {
+  const res = await calendarFetch(
     `https://www.googleapis.com/calendar/v3/calendars/primary/events/${encodeURIComponent(eventId)}`,
-    {
-      method: "DELETE",
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-      },
-    }
+    { method: "DELETE" }
   );
   return res.ok || res.status === 404 || res.status === 410;
 }
 
-async function insertAllDayEvent(
-  accessToken: string,
-  todo: TodoItem
-): Promise<string> {
+async function insertAllDayEvent(todo: TodoItem): Promise<string> {
   const body = {
     summary: todo.text,
     description: todo.completed
@@ -416,12 +499,11 @@ async function insertAllDayEvent(
     },
   };
 
-  const res = await fetch(
+  const res = await calendarFetch(
     "https://www.googleapis.com/calendar/v3/calendars/primary/events",
     {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${accessToken}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify(body),
@@ -444,7 +526,6 @@ async function insertAllDayEvent(
  * Remove leftover "■ 背景色" placeholder events from an earlier experiment.
  */
 async function cleanupDayBackgroundPlaceholders(
-  accessToken: string,
   exportMap: Record<string, string>
 ): Promise<number> {
   let cleaned = 0;
@@ -452,7 +533,7 @@ async function cleanupDayBackgroundPlaceholders(
   for (const key of keys) {
     const eventId = exportMap[key];
     try {
-      await deleteCalendarEvent(accessToken, eventId);
+      await deleteCalendarEvent(eventId);
       delete exportMap[key];
       cleaned += 1;
     } catch (error) {
@@ -488,7 +569,8 @@ export async function exportTodosToGoogleCalendar(
     return result;
   }
 
-  if (prefersRedirectAuth() && !getCachedToken()) {
+  // Desktop popup may fall back to full-page redirect; always stash first.
+  if (!getCachedToken()) {
     stashPendingAction({
       type: "export",
       todos: targets,
@@ -496,14 +578,11 @@ export async function exportTodosToGoogleCalendar(
     });
   }
 
-  const accessToken = await requestAccessToken();
+  await requestAccessToken();
   const exportMap = loadExportMap();
   const force = Boolean(options.force);
 
-  result.cleanedBackgrounds = await cleanupDayBackgroundPlaceholders(
-    accessToken,
-    exportMap
-  );
+  result.cleanedBackgrounds = await cleanupDayBackgroundPlaceholders(exportMap);
 
   for (const todo of targets) {
     if (!force && todo.googleChecked) {
@@ -512,7 +591,7 @@ export async function exportTodosToGoogleCalendar(
     }
 
     try {
-      const eventId = await insertAllDayEvent(accessToken, todo);
+      const eventId = await insertAllDayEvent(todo);
       exportMap[todo.id] = eventId;
       saveExportMap(exportMap);
       await updateTodoGoogleMark(todo.id, {
@@ -621,10 +700,10 @@ export async function listGoogleCalendarEventsToImport(
   existingTodos: TodoItem[]
 ): Promise<GoogleImportListResult> {
   // Docs: https://developers.google.com/calendar/api/v3/reference/events/list
-  if (prefersRedirectAuth() && !getCachedToken()) {
+  if (!getCachedToken()) {
     stashPendingAction({ type: "auth-only" });
   }
-  const accessToken = await requestAccessToken();
+  await requestAccessToken();
   const { timeMin, timeMax, monthStart, monthEndExclusive } = monthTimeBounds(
     year,
     month
@@ -661,11 +740,9 @@ export async function listGoogleCalendarEventsToImport(
     });
     if (pageToken) params.set("pageToken", pageToken);
 
-    const res = await fetch(
+    const res = await calendarFetch(
       `https://www.googleapis.com/calendar/v3/calendars/primary/events?${params}`,
-      {
-        headers: { Authorization: `Bearer ${accessToken}` },
-      }
+      { method: "GET" }
     );
 
     if (!res.ok) {
@@ -776,8 +853,7 @@ export async function deleteTodoFromGoogleCalendar(
     return { deleted: false, skipped: true };
   }
 
-  const accessToken = await requestAccessToken();
-  const ok = await deleteCalendarEvent(accessToken, eventId);
+  const ok = await deleteCalendarEvent(eventId);
   if (!ok) {
     throw new Error("Googleカレンダーの予定を削除できませんでした");
   }

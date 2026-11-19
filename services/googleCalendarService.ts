@@ -189,6 +189,10 @@ function startImplicitRedirect(forceConsent = false) {
     prompt: useConsent ? "consent" : "none",
     state: "gcal",
   });
+  const loginHint = getLoginHint();
+  if (loginHint) {
+    params.set("login_hint", loginHint);
+  }
   window.location.assign(
     `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`
   );
@@ -225,6 +229,8 @@ declare global {
           initTokenClient: (config: {
             client_id: string;
             scope: string;
+            hint?: string;
+            login_hint?: string;
             callback: (response: TokenResponse) => void;
             error_callback?: (error: { type?: string; message?: string }) => void;
           }) => TokenClient;
@@ -256,6 +262,10 @@ export type GoogleExportOptions = {
 
 function getClientId(): string {
   return (import.meta.env.VITE_GOOGLE_CLIENT_ID || "").trim();
+}
+
+function getLoginHint(): string {
+  return (import.meta.env.VITE_GOOGLE_LOGIN_HINT || "").trim();
 }
 
 export function isGoogleCalendarConfigured(): boolean {
@@ -392,6 +402,7 @@ function requestAccessToken(options: { forceConsent?: boolean } = {}): Promise<s
       const tokenClient = window.google.accounts.oauth2.initTokenClient({
         client_id: clientId,
         scope: CALENDAR_SCOPE,
+        ...(getLoginHint() ? { hint: getLoginHint(), login_hint: getLoginHint() } : {}),
         callback: (response) => {
           if (response.error || !response.access_token) {
             // Silent re-auth often fails after cookie / consent changes.

@@ -10,7 +10,8 @@
    - User Type: 外部（個人利用ならこれ）
    - アプリ名などを入力
    - スコープに `https://www.googleapis.com/auth/calendar.events` を追加（または初回同意時に要求）
-   - テストユーザーに自分の Google アカウントを追加（公開前は必須）
+   - テストユーザーに、連携する Google アカウントを追加（公開前は必須）
+     - 高度な保護があるアカウントは使えないので、専用アカウント（例: `to.katufumi.1122@gmail.com`）を追加する
 4. **API とサービス → 認証情報 → 認証情報を作成 → OAuth クライアント ID**
    - アプリケーションの種類: **ウェブアプリケーション**
    - 承認済みの JavaScript 生成元:
@@ -27,9 +28,10 @@
 
 ```bash
 VITE_GOOGLE_CLIENT_ID=あなたのクライアントID.apps.googleusercontent.com
+VITE_GOOGLE_LOGIN_HINT=to.katufumi.1122@gmail.com
 ```
 
-本番（Vercel）にも同名の環境変数を設定し、再デプロイしてください。
+本番（Vercel）にも同名の環境変数を設定し、再デプロイしてください。`VITE_GOOGLE_LOGIN_HINT` は任意で、Gカレ許可時にそのアカウントを優先します。
 
 ## 3. 使い方
 
